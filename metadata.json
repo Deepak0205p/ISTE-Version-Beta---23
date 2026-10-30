@@ -1,0 +1,6 @@
+{
+  "name": "Can I Afford It Next Month?",
+  "description": "Deterministic personal finance affordability checker and moving-block bootstrap cashflow forecaster for salaried, freelance, and variable earners.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
