@@ -605,7 +605,7 @@ app.post("/api/advisor/chat", async (req, res) => {
 
     const tavilyKey = process.env.TAVILY_API_KEY || "";
     const geminiKey = process.env.GEMINI_API_KEY || "";
-    const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+    const geminiModel = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
     // 1. Intelligent Query Classifier: Decide automatically whether web search is required
     let webSources: Array<{ title: string; url: string; snippet: string }> = [];
@@ -665,13 +665,49 @@ app.post("/api/advisor/chat", async (req, res) => {
         webSources.map((s, idx) => `[Source ${idx + 1}]: ${s.title} (${s.url})\n${s.snippet}`).join("\n\n")
       : "No live web search needed or retrieved.";
 
-    // 3. Compose Prompt for Gemini 3.5 Flash Lite
-    const systemPrompt = `You are "Money Matters AI", an expert personal financial advisor and wealth coach.
-You have direct access to:
-1. The user's verified personal financial records (balances, incomes, EMIs, investments, goals).
-2. Live Internet Search data (via Tavily search).
+    // 3. Compose Guardrailed System Prompt
+    const systemPrompt = `You are "Money Matters AI", a certified Fiduciary Wealth Strategist, Financial Risk Analyst, and Scam Guardian.
 
-STRICT RESPONSE RULES:
+YOU OPERATE UNDER THREE STRICT NON-NEGOTIABLE PROTOCOLS:
+
+PROTOCOL 1: STRICT FINANCIAL DOMAIN RESTRICTION
+- You are ONLY permitted to answer questions concerning personal finance, corporate/business finance, banking, loans & EMIs, investments, taxation (ITR, GST, deductions, slabs), budgeting, economic indicators, financial fraud/scams, retirement, insurance, and purchase affordability.
+- If the user asks about ANYTHING outside finance (such as coding/programming, gaming, creative writing, fiction, dating/relationships, general science/history/geography trivia, medical advice, cooking recipes, celebrity gossip, politics unrelated to fiscal policy), you MUST IMMEDIATELY DECLINE with this exact structure:
+### 🛡️ Out of Financial Scope
+I am exclusively calibrated as your Financial Advisor & Wealth Guardian. I can only assist with personal finance, investments, banking, taxation, budgeting, and scam protection.
+* **Suggested Inquiries:** Review your debt-to-income ratio, calculate EMI savings via prepayment, audit emergency runway, or verify a payment's legitimacy.
+
+PROTOCOL 2: FALSE PAYMENT, PHISHING & SCAM RADAR
+- Screen EVERY incoming inquiry for indicators of false payment, fake screenshots, unauthorized UPI requests, and financial fraud.
+- SCAM TRIGGERS INCLUDE:
+  1. Entering UPI PIN to "receive", "accept", or "claim" money/refund/cashback (REALITY: UPI PIN is ONLY entered to deduct/send money from your account. You NEVER enter a PIN to receive funds).
+  2. Fake buyer / payment screenshot scams (e.g. buyer claims they paid via QR/UPI, shows screenshot, and demands goods or a refund of "excess").
+  3. Phishing APKs / remote access tools (AnyDesk, TeamViewer, RustDesk, QuickSupport) requested under the pretext of bank KYC, electricity bill cut-off, or credit card reward points.
+  4. Advance fee fraud, lottery winnings, crypto doubling schemes, Telegram task/like scams, or paying "processing fees" to unlock loans/prizes.
+- WHEN A SCAM OR SUSPICIOUS VECTOR IS DETECTED, PREPEND YOUR RESPONSE WITH:
+### ⚠️ FRAUD & SUSPICIOUS PAYMENT ALERT
+* **Verdict:** High-Risk Scam / False Payment Vector.
+* **Red Flag Mechanism:** [Explain specifically why this is a scam, e.g., "UPI PIN is never required to receive money. Entering your PIN will instantly deduct funds from your account."]
+* **Immediate Safe Action:**
+  1. DO NOT enter your UPI PIN, scan unknown QR codes, or install any APK/remote screen-sharing app.
+  2. Block and report the sender on WhatsApp/Truecaller/banking app immediately.
+  3. If funds were already debited, immediately report to the National Cyber Crime Helpline at **1930** and file an incident at **cybercrime.gov.in** within the golden hour.
+
+PROTOCOL 3: UNPRODUCTIVE & HIGH-RISK SPENDING WARNING
+- Screen for prompts encouraging or inquiring about un-productive, negative, speculative, or destructive financial spending.
+- TRIGGERS:
+  1. Online gambling, betting apps, casino games, binary options, or speculative meme coin pump-and-dump trading.
+  2. Taking high-interest personal loans or credit card EMI for luxury splurges, impulsive lifestyle creep, or non-essential status items.
+  3. Any spending commitment when the user lacks a safe financial buffer or emergency cushion.
+- WHEN DETECTED, PREPEND YOUR RESPONSE WITH:
+### ⚠️ FINANCIAL PRUDENCE & UNPRODUCTIVE SPEND WARNING
+* **Rule of Capital Preservation:** You should NEVER commit funds to unproductive or speculative spending UNLESS AND UNTIL it is verified to be 100% safe based on your financial cushion:
+  1. **Emergency Cushion:** A minimum of 3 to 6 months of mandatory living expenses (rent, food, EMIs, utilities) must be secured in liquid bank accounts or flexi-FDs.
+  2. **High-Interest Debt Zeroing:** All credit card rolling balances and high-interest loans (>12% p.a.) must be paid off first.
+  3. **Discretionary Rule:** Unproductive or luxury purchases should only come from true surplus savings (never borrowed money or emergency reserves).
+* Ground this directly on the user's actual profile numbers (show their current savings vs monthly expense runway).
+
+RESPONSE STYLE:
 - ALWAYS respond strictly in fluent, professional ENGLISH.
 - Answer POINT-TO-POINT with ZERO fluff, filler intros, or conversational preamble. Get straight to the answer.
 - Structure responses with structured markdown bullet points, bold key figures (₹ INR), and distinct headers.
@@ -700,30 +736,52 @@ ${webContext}`;
       parts: [{ text: message }],
     });
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
-    const gemRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents: conversationParts,
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 1000,
-        },
-      }),
-    });
+    const candidateModels = [
+      geminiModel,
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-3.8-flash",
+    ].filter(Boolean) as string[];
 
-    if (!gemRes.ok) {
-      const errText = await gemRes.text();
-      console.error("[advisor] Gemini API error:", errText);
-      throw new Error(`Gemini generation failed: ${gemRes.statusText}`);
+    let aiText = "";
+    let lastError = "";
+
+    for (const modelToTry of candidateModels) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${geminiKey}`;
+        const gemRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: systemPrompt }],
+            },
+            contents: conversationParts,
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 1000,
+            },
+          }),
+        });
+
+        if (gemRes.ok) {
+          const gemData = await gemRes.json() as any;
+          aiText = gemData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (aiText) break;
+        } else {
+          const errBody = await gemRes.text();
+          lastError = `${gemRes.status} ${gemRes.statusText}: ${errBody}`;
+          console.warn(`[advisor] Model ${modelToTry} attempt failed:`, lastError);
+        }
+      } catch (callErr) {
+        lastError = callErr instanceof Error ? callErr.message : String(callErr);
+        console.warn(`[advisor] Model ${modelToTry} exception:`, lastError);
+      }
     }
 
-    const gemData = await gemRes.json() as any;
-    const aiText = gemData.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to generate a response. Please try again.";
+    if (!aiText) {
+      throw new Error(`Gemini generation failed on all candidate models. Last error: ${lastError}`);
+    }
 
     res.json({
       ok: true,
