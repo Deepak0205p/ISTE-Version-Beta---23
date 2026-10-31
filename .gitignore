@@ -1,7 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -15,14 +13,19 @@
 
 # next.js
 /.next/
+frontend/.next/
 /out/
+frontend/out/
 
 # production
 /build
+frontend/build/
+backend/dist/
 
 # misc
 .DS_Store
 *.pem
+*.log
 
 # debug
 npm-debug.log*
@@ -30,8 +33,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,9 +44,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local SQLite database (single-file, zero-setup)
+# local SQLite database & uploads
 /data/
 *.db
 *.db-shm
 *.db-wal
+backend/uploads/*
+!backend/uploads/.gitkeep
 
+backend/serviceAccountKey.json
+serviceAccountKey.json
