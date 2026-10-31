@@ -33,13 +33,23 @@ export function UploadPanel({
   const [result, setResult] = useState<{ ok: boolean; message: string; detail?: string } | null>(null);
 
   function addFiles(list: FileList | null) {
-    if (!list) return;
+    if (!list || list.length === 0) return;
     const next = Array.from(list).filter((f) => /\.(csv|pdf)$/i.test(f.name));
+    if (next.length === 0) return;
     setFiles((prev) => {
-      const seen = new Set(prev.map((f) => f.name + f.size));
-      return [...prev, ...next.filter((f) => !seen.has(f.name + f.size))];
+      const seen = new Set(prev.map((f) => `${f.name}-${f.size}-${f.lastModified}`));
+      const fresh = next.filter((f) => !seen.has(`${f.name}-${f.size}-${f.lastModified}`));
+      return [...prev, ...fresh];
     });
     setResult(null);
+  }
+
+  function removeFile(fileToRemove: File) {
+    setFiles((prev) =>
+      prev.filter(
+        (f) => `${f.name}-${f.size}-${f.lastModified}` !== `${fileToRemove.name}-${fileToRemove.size}-${fileToRemove.lastModified}`,
+      ),
+    );
   }
 
   async function upload() {
@@ -48,18 +58,20 @@ export function UploadPanel({
     setResult(null);
     try {
       const body = new FormData();
-      files.forEach((f) => body.append("files", f));
+      for (const file of files) {
+        body.append("files", file, file.name);
+      }
       body.append("account_label", accountLabel.trim() || "default");
 
       const res = await fetch("/api/upload", { method: "POST", body });
       const json = await res.json();
 
       if (json.ok) {
-        await fetch("/api/ingest", { method: "POST" });
+        await fetch("/api/ingest", { method: "POST" }).catch(() => {});
         setResult({
           ok: true,
-          message: json.uploads?.[0]?.message ?? "Uploaded.",
-          detail: `parsed ${json.parsed_rows} · rejected ${json.rejected_rows}`,
+          message: json.uploads?.[0]?.message ?? "Uploaded successfully.",
+          detail: `parsed ${json.parsed_rows ?? 0} · rejected ${json.rejected_rows ?? 0}`,
         });
         setFiles([]);
         onUploaded?.();
@@ -109,7 +121,13 @@ export function UploadPanel({
             accept={ACCEPT}
             multiple
             className="sr-only"
-            onChange={(e) => addFiles(e.target.files)}
+            onClick={(e) => {
+              (e.target as HTMLInputElement).value = "";
+            }}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
           <span className="bg-background flex size-11 items-center justify-center rounded-full border">
             <FileSpreadsheet className="text-muted-foreground size-5" />
@@ -149,10 +167,8 @@ export function UploadPanel({
                   <button
                     type="button"
                     aria-label={`Remove ${f.name}`}
-                    className="hover:text-destructive"
-                    onClick={() =>
-                      setFiles((prev) => prev.filter((x) => x.name + x.size !== f.name + f.size))
-                    }
+                    className="hover:text-destructive transition-colors p-0.5 rounded cursor-pointer"
+                    onClick={() => removeFile(f)}
                   >
                     ✕
                   </button>

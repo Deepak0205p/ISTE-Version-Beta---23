@@ -55,20 +55,8 @@ export default function UploadPage() {
   const { data, loading } = useLedger(refreshKey);
   const bump = () => setRefreshKey((k) => k + 1);
 
-  const addFiles = useCallback(async (list: FileList | File[] | null) => {
-    if (!list) return;
-    const incoming = Array.from(list).filter((f) =>
-      /\.(csv|pdf)$/i.test(f.name),
-    );
-    setFiles((prev) => {
-      const seen = new Set(prev.map((f) => f.name + f.size));
-      return [...prev, ...incoming.filter((f) => !seen.has(f.name + f.size))];
-    });
-    setError(null);
-    setRows([]);
-
-    // client-side preview for the first CSV — instant feedback while reading
-    const firstCsv = incoming.find((f) => /\.csv$/i.test(f.name));
+  const updatePreview = useCallback(async (currentFiles: File[]) => {
+    const firstCsv = currentFiles.find((f) => /\.csv$/i.test(f.name));
     if (firstCsv) {
       setReading(true);
       try {
@@ -78,7 +66,7 @@ export default function UploadPage() {
         setPreview({
           header,
           adapter: detectAdapter(header)?.id ?? null,
-          lines: lines.length - 1,
+          lines: Math.max(0, lines.length - 1),
         });
       } catch {
         setPreview(null);
@@ -90,34 +78,79 @@ export default function UploadPage() {
     }
   }, []);
 
+  const addFiles = useCallback((list: FileList | File[] | null) => {
+    if (!list || list.length === 0) return;
+    const incoming = Array.from(list).filter((f) =>
+      /\.(csv|pdf)$/i.test(f.name),
+    );
+    if (incoming.length === 0) return;
+
+    setFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}-${f.size}-${f.lastModified}`));
+      const fresh = incoming.filter((f) => !seen.has(`${f.name}-${f.size}-${f.lastModified}`));
+      const next = [...prev, ...fresh];
+      void updatePreview(next);
+      return next;
+    });
+    setError(null);
+    setRows([]);
+  }, [updatePreview]);
+
+  const removeFile = useCallback((fileToRemove: File) => {
+    setFiles((prev) => {
+      const next = prev.filter(
+        (f) => `${f.name}-${f.size}-${f.lastModified}` !== `${fileToRemove.name}-${fileToRemove.size}-${fileToRemove.lastModified}`,
+      );
+      void updatePreview(next);
+      return next;
+    });
+  }, [updatePreview]);
+
   async function upload() {
     if (files.length === 0 || busy) return;
     setBusy(true);
     setError(null);
     setRows([]);
+
     try {
       const body = new FormData();
-      files.forEach((f) => body.append("files", f));
+      for (const file of files) {
+        body.append("files", file, file.name);
+      }
       body.append("account_label", accountLabel.trim() || "default");
-      if (pdfPassword.trim()) body.append("pdf_password", pdfPassword.trim());
+      if (pdfPassword.trim()) {
+        body.append("pdf_password", pdfPassword.trim());
+      }
 
       const res = await fetch("/api/upload", { method: "POST", body });
-      const json = (await res.json()) as { ok: boolean; uploads?: UploadRow[]; message?: string };
+      const json = (await res.json()) as {
+        ok: boolean;
+        uploads?: UploadRow[];
+        message?: string;
+        parsed_rows?: number;
+        rejected_rows?: number;
+      };
 
-      if (!json.uploads) {
-        setError(json.message ?? "Upload failed.");
+      if (!res.ok && !json.uploads) {
+        setError(json.message ?? `Upload failed with HTTP ${res.status}.`);
+        return;
+      }
+
+      if (!json.uploads || json.uploads.length === 0) {
+        setError(json.message ?? "Upload returned no data.");
       } else {
         setRows(json.uploads);
-        if (json.uploads.some((u) => u.ok)) {
-          // run the hygiene pipeline automatically after a good upload
-          await fetch("/api/ingest", { method: "POST" });
+        const hasSuccess = json.uploads.some((u) => u.ok);
+        if (hasSuccess) {
+          // run the hygiene pipeline automatically after successful upload
+          await fetch("/api/ingest", { method: "POST" }).catch(() => {});
           bump();
           setFiles([]);
           setPreview(null);
         }
       }
-    } catch {
-      setError("Network error — is the dev server running?");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error — is the dev server running?");
     } finally {
       setBusy(false);
     }
@@ -172,7 +205,13 @@ export default function UploadPage() {
                 accept={ACCEPT}
                 multiple
                 className="sr-only"
-                onChange={(e) => void addFiles(e.target.files)}
+                onClick={(e) => {
+                  (e.target as HTMLInputElement).value = "";
+                }}
+                onChange={(e) => {
+                  void addFiles(e.target.files);
+                  e.target.value = "";
+                }}
               />
               <span className="bg-background flex size-11 items-center justify-center rounded-full border">
                 <FileSpreadsheet className="text-muted-foreground size-5" />
@@ -251,12 +290,8 @@ export default function UploadPage() {
                       <button
                         type="button"
                         aria-label={`Remove ${f.name}`}
-                        className="hover:text-destructive"
-                        onClick={() =>
-                          setFiles((prev) =>
-                            prev.filter((x) => x.name + x.size !== f.name + f.size),
-                          )
-                        }
+                        className="hover:text-destructive transition-colors p-0.5 rounded cursor-pointer"
+                        onClick={() => removeFile(f)}
                       >
                         ✕
                       </button>
