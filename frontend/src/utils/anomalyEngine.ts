@@ -1,4 +1,4 @@
-import { ExpenseRecord, TransactionRecord } from '../types';
+import { ExpenseRecord, TransactionRecord, HabitualExpense } from '../types';
 
 export interface AnomalyReport {
   recordId: string;
@@ -166,3 +166,46 @@ export function evaluatePreFlightSufficiency(
   };
 }
 
+
+
+/**
+ * Automatically synthesizes habitual/recurring expenses from detected recurring patterns
+ */
+export function detectHabitualExpenses(
+  expenses: ExpenseRecord[],
+  existing: HabitualExpense[] = []
+): HabitualExpense[] {
+  if (!expenses || expenses.length === 0) return existing;
+  const recurring = expenses.filter(e => e.isRecurring);
+  if (recurring.length === 0) return existing;
+
+  const grouped = new Map<string, ExpenseRecord[]>();
+  for (const e of recurring) {
+    const key = e.title.trim().toLowerCase();
+    const list = grouped.get(key) || [];
+    list.push(e);
+    grouped.set(key, list);
+  }
+
+  const synthesized: HabitualExpense[] = [...existing];
+  for (const [key, records] of grouped.entries()) {
+    if (!synthesized.some(s => s.title.toLowerCase() === key)) {
+      const latest = records.sort((a, b) => b.date.localeCompare(a.date))[0];
+      const avg = Math.round(records.reduce((sum, r) => sum + r.amount, 0) / records.length);
+      const day = parseInt(latest.date.split('-')[2] || '5', 10);
+      synthesized.push({
+        id: `habitual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: latest.title,
+        category: latest.category,
+        amount: avg,
+        frequency: 'Monthly',
+        expectedDayOfMonth: isNaN(day) ? 5 : Math.min(28, Math.max(1, day)),
+        lastPaymentDate: latest.date,
+        nextPaymentDate: latest.date,
+        historicalChange: 0,
+        confidenceScore: Math.min(95, 60 + records.length * 10),
+      });
+    }
+  }
+  return synthesized;
+}
