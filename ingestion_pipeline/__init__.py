@@ -4,6 +4,14 @@ from .email_fetcher import GmailStatementFetcher, EmailAttachment
 from .gemini_parser import GeminiStatementParser, StatementData, Transaction
 from .firestore_storage import FirestoreStatementRepository
 from .pipeline import StatementIngestionService
+from .auth_manager import (
+    generate_authorization_url,
+    handle_oauth_callback,
+    get_user_gmail_service,
+    TokenNotFoundError,
+    TokenRevokedOrInvalidError,
+    OAuthConfigurationError
+)
 
 __all__ = [
     "UserProfile",
@@ -18,4 +26,10 @@ __all__ = [
     "Transaction",
     "FirestoreStatementRepository",
     "StatementIngestionService",
+    "generate_authorization_url",
+    "handle_oauth_callback",
+    "get_user_gmail_service",
+    "TokenNotFoundError",
+    "TokenRevokedOrInvalidError",
+    "OAuthConfigurationError"
 ]

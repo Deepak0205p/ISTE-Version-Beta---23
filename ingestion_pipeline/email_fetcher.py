@@ -1,7 +1,7 @@
 import os
 import io
 import base64
-from typing import List, Optional, Dict, Any, Generator
+from typing import List, Optional, Any
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -39,13 +39,22 @@ class GmailStatementFetcher:
     """
     Ingests bank e-statement PDFs directly via Gmail API using OAuth 2.0.
     Stores all attachments strictly in-memory (io.BytesIO), never writing to disk.
+    Accepts an already authenticated Google API client service instance or authenticates via local credentials.
     """
-    def __init__(self, credentials_path: str = "credentials.json", token_path: str = "token.json"):
+    def __init__(
+        self,
+        service: Optional[Any] = None,
+        credentials_path: str = "credentials.json",
+        token_path: str = "token.json"
+    ):
         self.credentials_path = credentials_path
         self.token_path = token_path
-        self.service = None
+        self.service = service
 
     def authenticate(self) -> None:
+        if self.service:
+            return
+
         creds = None
         if os.path.exists(self.token_path):
             creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
