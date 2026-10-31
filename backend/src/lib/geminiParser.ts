@@ -48,7 +48,7 @@ Return ONLY a valid JSON array of objects matching the schema.`;
 async function callGeminiForStatement(
   parts: Array<Record<string, unknown>>
 ): Promise<ExtractedAiTxn[]> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "AQ.Ab8RN6J-sF1BtzwQ-AsK0lq1ET7uBX4JjTXQJGlkTjdoFAZxbw";
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
   const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;

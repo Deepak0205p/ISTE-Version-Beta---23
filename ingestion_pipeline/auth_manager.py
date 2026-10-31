@@ -26,7 +26,7 @@ def get_firestore_client() -> firestore.firestore.Client:
             os.environ.get("FIREBASE_SERVICE_ACCOUNT")
             or os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
         )
-        project_id = os.environ.get("FIREBASE_PROJECT_ID") or "money-matters-207e8"
+        project_id = os.environ.get("FIREBASE_PROJECT_ID") or ""
         if service_account_path and os.path.exists(service_account_path):
             cred = credentials.Certificate(service_account_path)
             firebase_admin.initialize_app(cred, {"projectId": project_id})

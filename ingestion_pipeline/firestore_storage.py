@@ -19,7 +19,7 @@ class FirestoreStatementRepository:
             or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
             or os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
         )
-        self.project_id = os.environ.get("FIREBASE_PROJECT_ID") or "money-matters-207e8"
+        self.project_id = os.environ.get("FIREBASE_PROJECT_ID") or ""
         self._init_firebase()
         self.db = firestore.client()
 

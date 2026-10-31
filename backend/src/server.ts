@@ -71,7 +71,7 @@ app.get("/api/config", (_req, res) => {
   res.json({
     llmProvider: process.env.LLM_PROVIDER ?? "gemini",
     hasApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
-    geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
     firebase: {
       projectId: process.env.FIREBASE_PROJECT_ID,
       apiKey: process.env.FIREBASE_API_KEY,
@@ -603,8 +603,8 @@ app.post("/api/advisor/chat", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Valid message is required" });
     }
 
-    const tavilyKey = process.env.TAVILY_API_KEY || "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";
-    const geminiKey = process.env.GEMINI_API_KEY || "AQ.Ab8RN6J-sF1BtzwQ-AsK0lq1ET7uBX4JjTXQJGlkTjdoFAZxbw";
+    const tavilyKey = process.env.TAVILY_API_KEY || "";
+    const geminiKey = process.env.GEMINI_API_KEY || "";
     const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
     // 1. Intelligent Query Classifier: Decide automatically whether web search is required

@@ -47,7 +47,7 @@ class GeminiStatementParser:
     Processes in-memory decrypted PDF bytes without writing to disk.
     Enforces deterministic Pydantic schema validation.
     """
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.5-flash-lite"):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY must be provided or set in environment variables.")
