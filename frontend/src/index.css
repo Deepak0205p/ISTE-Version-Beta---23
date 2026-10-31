@@ -206,6 +206,48 @@ html:not(.dark) [class*="text-[#94A3B8]"],
   color: #7A6B59 !important;
 }
 
+html:not(.dark) [class*="text-[#CFC4B6]"],
+.light [class*="text-[#CFC4B6]"],
+html:not(.dark) [class*="text-[#D9C0A0]"],
+.light [class*="text-[#D9C0A0]"] {
+  color: #4A3B2C !important;
+}
+
+html:not(.dark) [class*="text-[#E2C799]"],
+.light [class*="text-[#E2C799]"],
+html:not(.dark) [class*="text-[#D4A373]"],
+.light [class*="text-[#D4A373]"] {
+  color: #8C5E32 !important;
+}
+
+html:not(.dark) .text-emerald-400,
+.light .text-emerald-400,
+html:not(.dark) .text-emerald-300,
+.light .text-emerald-300 {
+  color: #047857 !important;
+}
+
+html:not(.dark) .text-amber-300,
+.light .text-amber-300,
+html:not(.dark) .text-amber-400,
+.light .text-amber-400 {
+  color: #B45309 !important;
+}
+
+html:not(.dark) .text-sky-300,
+.light .text-sky-300,
+html:not(.dark) .text-sky-400,
+.light .text-sky-400 {
+  color: #0369A1 !important;
+}
+
+html:not(.dark) .text-red-400,
+.light .text-red-400,
+html:not(.dark) .text-rose-400,
+.light .text-rose-400 {
+  color: #BE123C !important;
+}
+
 html:not(.dark) [class*="text-[#ECEAE6]"],
 .light [class*="text-[#ECEAE6]"],
 html:not(.dark) [class*="text-[#F5F4F2]"],

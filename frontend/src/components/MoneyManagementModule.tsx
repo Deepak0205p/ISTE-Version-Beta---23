@@ -18,7 +18,8 @@ import {
   Trash2,
   Edit2,
   FileText,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 
 const expenseCategories: ExpenseCategory[] = [
@@ -107,6 +108,28 @@ export const MoneyManagementModule: React.FC = () => {
     bankAccountId: bankAccounts[0]?.id || '',
     familyMemberId: currentUser.id,
     isRecurring: false
+  });
+
+  // New Medical Outflow State
+  const [newMedical, setNewMedical] = useState({
+    description: '',
+    amount: 5000,
+    category: 'CONSULTATION' as any,
+    hospitalOrDoctor: '',
+    claimStatus: 'SETTLED' as any,
+    date: new Date().toISOString().split('T')[0],
+    familyMemberId: currentUser.id
+  });
+
+  // New Education Fee State
+  const [newEducation, setNewEducation] = useState({
+    studentId: students[0]?.id || '',
+    expenseType: 'TUITION' as any,
+    amount: 45000,
+    institution: '',
+    academicPeriod: 'Semester 1',
+    dueDate: new Date().toISOString().split('T')[0],
+    status: 'PAID' as any
   });
 
   // Filtered Expenses
@@ -721,9 +744,23 @@ export const MoneyManagementModule: React.FC = () => {
 
       {/* Modal: Add Expense */}
       {showAddExpenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Log Expense Record</h3>
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddExpenseModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Log Expense Record</h3>
+              <button
+                onClick={() => setShowAddExpenseModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
             <div className="space-y-3 text-xs">
               <div>
                 <label className="text-[#A79A8A] block mb-1">Expense Description</label>
@@ -806,6 +843,213 @@ export const MoneyManagementModule: React.FC = () => {
                 className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
               >
                 Save Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Medical Outflow */}
+      {showAddMedicalModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddMedicalModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Log Medical Expense</h3>
+              <button
+                onClick={() => setShowAddMedicalModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[#A79A8A] block mb-1">Diagnosis / Treatment Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Annual Health Checkup & Blood Panels"
+                  value={newMedical.description}
+                  onChange={e => setNewMedical({ ...newMedical, description: e.target.value })}
+                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={newMedical.amount}
+                    onChange={e => setNewMedical({ ...newMedical, amount: Number(e.target.value) })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5 font-bold font-tabular"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Medical Category</label>
+                  <select
+                    value={newMedical.category}
+                    onChange={e => setNewMedical({ ...newMedical, category: e.target.value as any })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  >
+                    <option value="CONSULTATION">Doctor Consultation</option>
+                    <option value="PHARMACY">Pharmacy & Medicines</option>
+                    <option value="DIAGNOSTICS">Diagnostics & Lab Tests</option>
+                    <option value="HOSPITALIZATION">Hospitalization & Daycare</option>
+                    <option value="INSURANCE_PREMIUM">Health Insurance Premium</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Hospital / Clinic / Provider</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Max Healthcare"
+                    value={newMedical.hospitalOrDoctor}
+                    onChange={e => setNewMedical({ ...newMedical, hospitalOrDoctor: e.target.value })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Claim Status</label>
+                  <select
+                    value={newMedical.claimStatus}
+                    onChange={e => setNewMedical({ ...newMedical, claimStatus: e.target.value as any })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  >
+                    <option value="NOT_APPLICABLE">Out of Pocket / Self Paid</option>
+                    <option value="CLAIM_FILED">Claim In Process</option>
+                    <option value="SETTLED">Claim Settled / Cashless</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
+              <button onClick={() => setShowAddMedicalModal(false)} className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!newMedical.description || !newMedical.amount) return;
+                  const member = family.members.find(m => m.id === newMedical.familyMemberId);
+                  addMedicalExpense({
+                    ...newMedical,
+                    familyMemberName: member?.name || 'Self',
+                    isEmergencyFundDraw: false,
+                    insuranceClaimedAmount: newMedical.claimStatus === 'SETTLED' ? newMedical.amount : 0
+                  });
+                  setShowAddMedicalModal(false);
+                }}
+                className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
+              >
+                Save Medical Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Education Fee */}
+      {showAddEducationModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddEducationModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Record Tuition / Education Fee</h3>
+              <button
+                onClick={() => setShowAddEducationModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[#A79A8A] block mb-1">Institution / School / University</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Delhi Public School / BITS Pilani"
+                  value={newEducation.institution}
+                  onChange={e => setNewEducation({ ...newEducation, institution: e.target.value })}
+                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Fee Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={newEducation.amount}
+                    onChange={e => setNewEducation({ ...newEducation, amount: Number(e.target.value) })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5 font-bold font-tabular"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Fee Classification</label>
+                  <select
+                    value={newEducation.expenseType}
+                    onChange={e => setNewEducation({ ...newEducation, expenseType: e.target.value as any })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  >
+                    <option value="TUITION">Tuition & Term Fee</option>
+                    <option value="HOSTEL">Hostel & Accommodation</option>
+                    <option value="BOOKS_SUPPLIES">Books, Materials & Uniform</option>
+                    <option value="EXAM_FEE">Exam / Registration Fee</option>
+                    <option value="COACHING">Coaching & Skill Training</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Academic Period</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Q1 / Semester 2"
+                    value={newEducation.academicPeriod}
+                    onChange={e => setNewEducation({ ...newEducation, academicPeriod: e.target.value })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Payment Date / Due Date</label>
+                  <input
+                    type="date"
+                    value={newEducation.dueDate}
+                    onChange={e => setNewEducation({ ...newEducation, dueDate: e.target.value })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
+              <button onClick={() => setShowAddEducationModal(false)} className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!newEducation.institution || !newEducation.amount) return;
+                  const st = students.find(s => s.id === newEducation.studentId) || students[0];
+                  addEducationExpense({
+                    ...newEducation,
+                    studentId: st?.id || 'std-1',
+                    studentName: st?.name || 'Aarav Sharma',
+                    status: 'PAID'
+                  });
+                  setShowAddEducationModal(false);
+                }}
+                className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
+              >
+                Record Fee Payment
               </button>
             </div>
           </div>

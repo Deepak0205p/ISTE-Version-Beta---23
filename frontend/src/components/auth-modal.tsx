@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/authContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Mail, CheckCircle2, AlertCircle } from "lucide-react";
+import { Mail, CheckCircle2, AlertCircle, X } from "lucide-react";
 
 export function AuthModal({ onClose }: { onClose?: () => void }) {
   const { loginWithGoogle, sendEmailOtp } = useAuth();
@@ -45,10 +45,19 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto shadow-xl border-border">
-      <CardHeader className="text-center pb-4">
-        <CardTitle className="text-xl font-bold tracking-tight">Welcome to Money Matters</CardTitle>
-        <CardDescription>
+    <Card className="w-full max-w-md mx-auto shadow-2xl border border-[#3A3226] bg-[#1D1913] text-[#ECEAE6]">
+      <CardHeader className="text-center pb-4 relative">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        )}
+        <CardTitle className="text-xl font-bold tracking-tight text-white">Welcome to Money Matters</CardTitle>
+        <CardDescription className="text-[#A79A8A]">
           Sign in or create an account to securely access and forecast your finances
         </CardDescription>
       </CardHeader>

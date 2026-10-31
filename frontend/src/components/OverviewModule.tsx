@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useFinancial } from '../context/FinancialContext';
 import { formatINR, formatCompactINR } from '../utils/currency';
 import {
@@ -51,6 +52,8 @@ export const OverviewModule: React.FC = () => {
     isDarkMode
   } = useFinancial();
 
+  const router = useRouter();
+
   const gridStroke = isDarkMode ? '#3A3226' : '#E3DFD8';
   const axisStroke = isDarkMode ? '#A79A8A' : '#857767';
   const tooltipBg = isDarkMode ? '#241F17' : '#FFFFFF';
@@ -62,6 +65,16 @@ export const OverviewModule: React.FC = () => {
   // Dynamic Chart Maximized 3X State & Active Segment Hover
   const [isChartMaximized, setIsChartMaximized] = useState(false);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsChartMaximized(false);
+    };
+    if (isChartMaximized) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isChartMaximized]);
 
   // Category breakdown for Pie Chart
   const categoryMap: { [cat: string]: number } = {};
@@ -149,7 +162,12 @@ export const OverviewModule: React.FC = () => {
       {/* 3X MAXIMIZED DYNAMIC EXPENSE DISTRIBUTION MODAL OVERLAY */}
       {/* ======================================================== */}
       {isChartMaximized && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-8 animate-fadeIn">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsChartMaximized(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-8 animate-fadeIn"
+        >
           <div className="bg-[#1D1913] border-2 border-[#8D7A62] rounded-3xl w-full max-w-5xl p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
             <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#8D7A62]/10 rounded-full blur-3xl pointer-events-none" />
             
@@ -317,6 +335,7 @@ export const OverviewModule: React.FC = () => {
             onClick={() => {
               setCurrentTab('money-management');
               setActiveSubmodule('expense-manager');
+              router.push('/money-management');
             }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-semibold shadow-lg shadow-[#8D7A62]/20 transition-all cursor-pointer"
           >
@@ -325,13 +344,17 @@ export const OverviewModule: React.FC = () => {
           <button
             onClick={() => {
               setCurrentTab('banking');
+              router.push('/banking');
             }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#241F17] hover:bg-[#2E2820] text-[#ECEAE6] border border-[#3A3226] text-xs font-semibold transition cursor-pointer"
           >
             <FileSpreadsheet size={16} className="text-[#60A5FA]" /> Import Statement
           </button>
           <button
-            onClick={() => setCurrentTab('calculators')}
+            onClick={() => {
+              setCurrentTab('calculators');
+              router.push('/tools');
+            }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#241F17] hover:bg-[#2E2820] text-[#ECEAE6] border border-[#3A3226] text-xs font-semibold transition cursor-pointer"
           >
             <Calculator size={16} className="text-[#F59E0B]" /> Calculators
@@ -537,7 +560,10 @@ export const OverviewModule: React.FC = () => {
               <h2 className="text-base font-semibold text-white">Financial Goals</h2>
             </div>
             <button
-              onClick={() => setCurrentTab('goals-investments')}
+              onClick={() => {
+                setCurrentTab('goals-investments');
+                router.push('/goals');
+              }}
               className="text-xs text-[#8D7A62] hover:underline flex items-center gap-1 font-medium cursor-pointer"
             >
               View All <ChevronRight size={14} />

@@ -10,7 +10,8 @@ import {
   Award,
   Layers,
   ArrowUpRight,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
@@ -38,6 +39,16 @@ export const GoalsInvestmentsModule: React.FC = () => {
     targetAmount: 500000,
     monthlyContribution: 15000,
     targetDate: '2028-12-31'
+  });
+
+  // New Investment State
+  const [newInvestment, setNewInvestment] = useState({
+    name: '',
+    category: 'Mutual Funds' as any,
+    investedPrincipal: 100000,
+    currentValuation: 125000,
+    cagrOrXirr: 14.5,
+    investmentDate: new Date().toISOString().slice(0, 10),
   });
 
   // Portfolio allocation data
@@ -361,9 +372,23 @@ export const GoalsInvestmentsModule: React.FC = () => {
 
       {/* Modal: Add Goal */}
       {showAddGoalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Create Financial Goal</h3>
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddGoalModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Create Financial Goal</h3>
+              <button
+                onClick={() => setShowAddGoalModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
             <div className="space-y-3 text-xs">
               <div>
                 <label className="text-[#A79A8A] block mb-1">Goal Title</label>
@@ -397,7 +422,7 @@ export const GoalsInvestmentsModule: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
-              <button onClick={() => setShowAddGoalModal(false)} className="px-4 py-2 text-xs text-[#A79A8A]">
+              <button onClick={() => setShowAddGoalModal(false)} className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white">
                 Cancel
               </button>
               <button
@@ -410,9 +435,121 @@ export const GoalsInvestmentsModule: React.FC = () => {
                   });
                   setShowAddGoalModal(false);
                 }}
-                className="px-4 py-2 bg-[#8D7A62] text-white text-xs font-bold rounded-xl"
+                className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
               >
                 Create Goal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Investment Asset */}
+      {showAddInvModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddInvModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Add Investment Asset</h3>
+              <button
+                onClick={() => setShowAddInvModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[#A79A8A] block mb-1">Asset Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Parag Parikh Flexi Cap Fund"
+                  value={newInvestment.name}
+                  onChange={e => setNewInvestment({ ...newInvestment, name: e.target.value })}
+                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                />
+              </div>
+              <div>
+                <label className="text-[#A79A8A] block mb-1">Asset Class / Category</label>
+                <select
+                  value={newInvestment.category}
+                  onChange={e => setNewInvestment({ ...newInvestment, category: e.target.value as any })}
+                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                >
+                  <option value="Mutual Funds">Mutual Funds</option>
+                  <option value="Direct Equity">Direct Equity</option>
+                  <option value="Fixed Deposit">Fixed Deposit</option>
+                  <option value="Sovereign Gold Bonds">Sovereign Gold Bonds</option>
+                  <option value="Public Provident Fund">Public Provident Fund (PPF)</option>
+                  <option value="NPS">National Pension Scheme (NPS)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Invested Capital (₹)</label>
+                  <input
+                    type="number"
+                    value={newInvestment.investedPrincipal}
+                    onChange={e => setNewInvestment({ ...newInvestment, investedPrincipal: Number(e.target.value) })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Current Valuation (₹)</label>
+                  <input
+                    type="number"
+                    value={newInvestment.currentValuation}
+                    onChange={e => setNewInvestment({ ...newInvestment, currentValuation: Number(e.target.value) })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">CAGR / XIRR (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={newInvestment.cagrOrXirr}
+                    onChange={e => setNewInvestment({ ...newInvestment, cagrOrXirr: Number(e.target.value) })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#A79A8A] block mb-1">Investment Date</label>
+                  <input
+                    type="date"
+                    value={newInvestment.investmentDate}
+                    onChange={e => setNewInvestment({ ...newInvestment, investmentDate: e.target.value })}
+                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
+              <button onClick={() => setShowAddInvModal(false)} className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!newInvestment.name) return;
+                  addInvestment({
+                    ...newInvestment,
+                    folioOrAccount: `INV-${Date.now().toString().slice(-4)}`,
+                    ownerId: currentUser.id,
+                    ownerName: currentUser.name,
+                    status: 'ACTIVE'
+                  });
+                  setShowAddInvModal(false);
+                }}
+                className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
+              >
+                Add Asset
               </button>
             </div>
           </div>

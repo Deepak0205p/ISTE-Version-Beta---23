@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { formatINR, formatDate, formatCompactINR } from '../utils/currency';
 import { TransactionRecord } from '../types';
 import { categorizeDescriptor } from '../utils/merchantLexicon';
 import { auditRunningBalanceChain, StatementChainAuditReport } from '../utils/statementAudit';
 import { evaluatePreFlightSufficiency, PreFlightStatus } from '../utils/anomalyEngine';
+import { UnifiedStatementUploader } from './UnifiedStatementUploader';
 import {
   Landmark,
   FileSpreadsheet,
@@ -27,7 +28,8 @@ import {
   BarChart2,
   Lock,
   AlertOctagon,
-  KeyRound
+  KeyRound,
+  X
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -74,6 +76,15 @@ export const BankingModule: React.FC = () => {
   // Running Chain Audit Report State
   const [auditReport, setAuditReport] = useState<StatementChainAuditReport | null>(null);
 
+  useEffect(() => {
+    if (transactions.length > 0) {
+      const report = auditRunningBalanceChain(transactions);
+      setAuditReport(report);
+    } else {
+      setAuditReport(null);
+    }
+  }, [transactions]);
+
   // Pre-flight Data Sufficiency Evaluation
   const preFlight: PreFlightStatus = evaluatePreFlightSufficiency(transactions);
 
@@ -102,12 +113,21 @@ export const BankingModule: React.FC = () => {
       if (pdfPassword.trim()) body.append('pdf_password', pdfPassword.trim());
 
       const uploadResponse = await fetch('/api/upload', { method: 'POST', body });
-      const uploadResult = await uploadResponse.json() as {
+      if (!uploadResponse.ok) {
+        const text = await uploadResponse.text();
+        throw new Error(`Upload server error (${uploadResponse.status}): ${text.slice(0, 80)}`);
+      }
+      let uploadResult: {
         ok: boolean;
         uploads?: Array<{ file: string; ok: boolean; parsed?: number; message?: string }>;
         message?: string;
       };
-      if (!uploadResponse.ok || !uploadResult.ok) {
+      try {
+        uploadResult = await uploadResponse.json();
+      } catch {
+        throw new Error('Server returned an invalid response format.');
+      }
+      if (!uploadResult.ok) {
         throw new Error(uploadResult.message || 'Statement upload failed.');
       }
 
@@ -119,7 +139,7 @@ export const BankingModule: React.FC = () => {
       const successful = uploadResult.uploads?.filter(upload => upload.ok) ?? [];
       const importedRows = successful.reduce((total, upload) => total + (upload.parsed ?? 0), 0);
       setUploadMessage(`${successful.length} statement(s) imported and ${importedRows} row(s) added to the verified ledger.`);
-      setActiveTab('audit-gatekeeper');
+      setActiveTab('statement-analysis');
     } catch (error) {
       setUploadMessage(error instanceof Error ? error.message : 'Statement upload failed.');
     } finally {
@@ -131,7 +151,7 @@ export const BankingModule: React.FC = () => {
     if (parsedPreview.length > 0) {
       importBankTransactions(parsedPreview);
       setParsedPreview([]);
-      setActiveTab('transactions');
+      setActiveTab('statement-analysis');
     }
   };
 
@@ -549,80 +569,7 @@ export const BankingModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="text-xs text-[#A79A8A] block mb-1">Target Financial Account</label>
-                <select
-                  value={importTargetBank}
-                  onChange={e => setImportTargetBank(e.target.value)}
-                  className="w-full bg-[#241F17] border border-[#3A3226] text-white text-xs rounded-lg p-2.5"
-                >
-                  {bankAccounts.map(b => (
-                    <option key={b.id} value={b.id}>{b.bankName} ({b.nickname})</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-[#A79A8A] block mb-1 flex items-center gap-1.5">
-                  <KeyRound size={13} className="text-amber-400" />
-                  PDF In-Memory Decryption Password (RAM only)
-                </label>
-                <input
-                  type="password"
-                  placeholder="e.g. DOB/PAN (Processed in RAM, never logged to disk)"
-                  value={pdfPassword}
-                  onChange={e => setPdfPassword(e.target.value)}
-                  className="w-full bg-[#241F17] border border-[#3A3226] text-white text-xs rounded-lg p-2.5"
-                />
-              </div>
-            </div>
-
-            {/* Verified server-side upload area */}
-            <div
-              onDragOver={e => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={e => {
-                e.preventDefault();
-                setDragActive(false);
-                void handleStatementUpload(e.dataTransfer.files);
-              }}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition ${
-                dragActive ? 'border-[#8D7A62] bg-[#8D7A62]/5' : 'border-[#3A3226] bg-[#241F17]/50 hover:bg-[#241F17]'
-              }`}
-            >
-              <input
-                type="file"
-                accept=".csv,.pdf"
-                multiple
-                className="sr-only"
-                id="statement-upload"
-                onChange={e => {
-                  if (e.target.files) void handleStatementUpload(e.target.files);
-                  e.currentTarget.value = '';
-                }}
-              />
-              <label htmlFor="statement-upload" className="block cursor-pointer">
-              <UploadCloud size={36} className="mx-auto text-[#8D7A62] mb-3" />
-              <p className="text-sm font-semibold text-white">
-                Drag and drop your statement file here, or click to browse
-              </p>
-              <p className="text-xs text-[#A79A8A] mt-1">
-                CSV/PDF • running-balance reconciliation • local SQLite ledger
-              </p>
-              </label>
-            </div>
-
-            {isParsing && (
-              <div className="flex items-center justify-center gap-2 text-xs text-[#8D7A62] py-3">
-                <RefreshCw size={16} className="animate-spin" />
-                <span>Running balance chain verification & matching against 120+ Indian merchant patterns...</span>
-              </div>
-            )}
-            {uploadMessage && (
-              <div className="rounded-lg border border-[#3A3226] bg-[#241F17] px-3 py-2 text-xs text-[#CBD5E1]" role="status">
-                {uploadMessage}
-              </div>
-            )}
+            <UnifiedStatementUploader onUploadSuccess={() => setActiveTab('statement-analysis')} />
           </div>
 
           {/* Parsed Preview Table with Lexicon Categorization */}
@@ -816,9 +763,23 @@ export const BankingModule: React.FC = () => {
 
       {/* Modal: Add Bank Account */}
       {showAddAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Add Financial Account</h3>
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddAccountModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <h3 className="text-lg font-bold text-white">Add Financial Account</h3>
+              <button
+                onClick={() => setShowAddAccountModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
             <div className="space-y-3 text-xs">
               <div>
                 <label className="text-[#A79A8A] block mb-1">Bank Name</label>

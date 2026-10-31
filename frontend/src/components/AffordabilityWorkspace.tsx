@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useFinancial } from "@/context/FinancialContext";
+import { UnifiedStatementUploader } from "./UnifiedStatementUploader";
 import {
   AlertTriangle,
   Calendar,
@@ -12,6 +13,7 @@ import {
   TrendingUp,
   Upload,
   Wallet,
+  X,
 } from "lucide-react";
 
 export interface AffordabilityTransaction {
@@ -126,18 +128,22 @@ export const AffordabilityWorkspace: React.FC = () => {
   );
   const [correctionNote, setCorrectionNote] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [showWipeModal, setShowWipeModal] = useState<boolean>(false);
+  const [showUploader, setShowUploader] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchSnapshot = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/ps4", { cache: "no-store" });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        void syncWithBackend();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('mm_ledger_updated'));
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.snapshot) {
+          setSnapshot(data.snapshot);
+          void syncWithBackend();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('mm_ledger_updated'));
+          }
         }
       }
     } catch {
@@ -168,11 +174,26 @@ export const AffordabilityWorkspace: React.FC = () => {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      if (!res.ok) {
+        const errText = await res.text();
+        setUploadStatus(`Upload failed: Server error (${res.status}) - ${errText.slice(0, 80)}`);
+        return;
+      }
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        setUploadStatus("Upload failed: Invalid response from server");
+        return;
+      }
       if (data.ok && data.snapshot) {
         setSnapshot(data.snapshot);
+        void syncWithBackend();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
         setUploadStatus(
-          `Successfully processed ${files.length} statement(s) via Gemini AI • ${data.snapshot.transactions.length} active transactions in ledger.`
+          `Successfully processed ${files.length} statement(s) • ${data.snapshot.transactions?.length || 0} active transactions in ledger.`
         );
       } else {
         setUploadStatus(`Upload failed: ${data.error || "Could not parse document"}`);
@@ -199,13 +220,17 @@ export const AffordabilityWorkspace: React.FC = () => {
           new_category: newCategory,
         }),
       });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        setCorrectionNote(
-          `Updated ${data.merchant} to ${data.new_category} — ${data.note}`
-        );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.snapshot) {
+          setSnapshot(data.snapshot);
+          setCorrectionNote(
+            `Updated ${data.merchant} to ${data.new_category} — ${data.note}`
+          );
+        }
       }
+    } catch {
+      // Ignore
     } finally {
       setLoading(false);
     }
@@ -227,10 +252,14 @@ export const AffordabilityWorkspace: React.FC = () => {
           amount_inr: isNaN(parsedAmount) ? 80000 : parsedAmount,
         }),
       });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.snapshot) {
+          setSnapshot(data.snapshot);
+        }
       }
+    } catch {
+      // Ignore
     } finally {
       setLoading(false);
     }
@@ -240,16 +269,21 @@ export const AffordabilityWorkspace: React.FC = () => {
     setLoading(true);
     setCorrectionNote(null);
     setUploadStatus(null);
+    setShowWipeModal(false);
     try {
       const res = await fetch("/api/ps4", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "wipe" }),
       });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.snapshot) {
+          setSnapshot(data.snapshot);
+        }
       }
+    } catch {
+      // Ignore
     } finally {
       setLoading(false);
     }
@@ -299,11 +333,13 @@ export const AffordabilityWorkspace: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 pb-16 text-[#F5F4F2]" data-testid="affordability-dashboard">
+    <div className={`space-y-6 pb-16 transition-colors ${isDarkMode ? "text-[#F5F4F2]" : "text-[#35291C]"}`} data-testid="affordability-dashboard">
       {/* Top Header Bar */}
-      <header className="card-z flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl bg-[#161512] border border-[#2C261E] p-6 shadow-xl">
+      <header className={`card-z flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl p-6 shadow-sm border transition-colors ${
+        isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8]"
+      }`}>
         <div className="space-y-1.5">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+          <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
             Personal Finance Assistant
           </h1>
           <p className="text-xs sm:text-sm text-[#A79A8A] max-w-3xl">
@@ -313,26 +349,17 @@ export const AffordabilityWorkspace: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label
-            htmlFor="statement-upload"
+          <button
+            type="button"
+            onClick={() => setShowUploader(!showUploader)}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#D4A373] hover:bg-[#DFB387] text-[#121008] font-semibold text-xs sm:text-sm cursor-pointer transition shadow-md"
           >
             <Upload className="w-4 h-4" />
-            <span>Upload Statements (CSV / PDF)</span>
-            <input
-              id="statement-upload"
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".csv,.pdf"
-              onChange={handleFileUpload}
-              className="sr-only"
-              data-testid="statement-file-input"
-            />
-          </label>
+            <span>{showUploader ? "Hide Uploader" : "Upload Statements (CSV / PDF)"}</span>
+          </button>
           <button
             type="button"
-            onClick={handleWipe}
+            onClick={() => setShowWipeModal(true)}
             disabled={loading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#221E18] hover:bg-red-950/50 text-[#CFC4B6] hover:text-red-300 border border-[#3A3226] text-xs font-medium transition cursor-pointer"
             data-testid="wipe-data-button"
@@ -342,6 +369,17 @@ export const AffordabilityWorkspace: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {showUploader && (
+        <div className="animate-fadeIn">
+          <UnifiedStatementUploader
+            onUploadSuccess={() => {
+              void fetchSnapshot();
+              setShowUploader(false);
+            }}
+          />
+        </div>
+      )}
 
       {uploadStatus && (
         <div
@@ -362,14 +400,18 @@ export const AffordabilityWorkspace: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 6 cols: Affordability Question & Step-by-Step Receipt */}
         <section
-          className="card-z lg:col-span-6 rounded-2xl bg-[#161512] border border-[#2C261E] p-6 flex flex-col justify-between space-y-5"
+          className={`card-z lg:col-span-6 rounded-2xl p-6 flex flex-col justify-between space-y-5 transition-colors border ${
+            isDarkMode
+              ? "bg-[#161512] border-[#2C261E]"
+              : "bg-white border-[#E3DFD8] shadow-sm"
+          }`}
           data-testid="affordability-panel"
         >
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-[#D4A373]" />
-                <h2 className="text-base font-semibold text-white">
+                <Wallet className={`w-4 h-4 ${isDarkMode ? "text-[#D4A373]" : "text-[#8C5E32]"}`} />
+                <h2 className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
                   Affordability Calculator
                 </h2>
               </div>
@@ -381,13 +423,17 @@ export const AffordabilityWorkspace: React.FC = () => {
                 aria-label="Ask affordability question"
                 value={questionInput}
                 onChange={(e) => setQuestionInput(e.target.value)}
-                className="flex-1 rounded-xl bg-[#0F0E0B] border border-[#3A3226] px-3.5 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-[#D4A373]"
+                className={`flex-1 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition-colors ${
+                  isDarkMode
+                    ? "bg-[#0F0E0B] border border-[#3A3226] text-white focus:border-[#D4A373]"
+                    : "bg-[#F7F5F0] border border-[#DCD7CD] text-[#241F17] focus:border-[#8C5E32]"
+                }`}
                 data-testid="affordability-question-input"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2.5 rounded-xl bg-[#8D7A62] hover:bg-[#9E8B72] text-white font-semibold text-xs sm:text-sm transition shrink-0 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-[#8D7A62] hover:bg-[#6E5A44] text-white font-semibold text-xs sm:text-sm transition shrink-0 cursor-pointer shadow-sm"
                 data-testid="affordability-ask-button"
               >
                 Evaluate
@@ -410,99 +456,126 @@ export const AffordabilityWorkspace: React.FC = () => {
             ) : aff ? (
               <div className="space-y-4" data-testid="affordability-steps">
                 {/* Verdict Banner */}
-                <div className="flex items-center justify-between rounded-xl bg-[#1F1C16] border border-[#3A3226] p-4">
+                <div className={`flex items-center justify-between rounded-xl border p-4 transition-colors ${
+                  isDarkMode
+                    ? "bg-[#1F1C16] border-[#3A3226]"
+                    : aff.verdict === "YES"
+                      ? "bg-emerald-50 border-emerald-300"
+                      : aff.verdict === "TIGHT"
+                        ? "bg-amber-50 border-amber-300"
+                        : "bg-rose-50 border-rose-300"
+                }`}>
                   <div>
-                    <p className="text-[11px] font-mono uppercase text-[#A79A8A]">
+                    <p className={`text-[11px] font-mono uppercase font-semibold ${
+                      isDarkMode ? "text-[#A79A8A]" : "text-[#7A6B59]"
+                    }`}>
                       Affordability Verdict for {formatPaiseINR(aff.target_amount_paise)}
                     </p>
                     <p
                       className={`text-xl font-bold font-mono mt-0.5 ${
                         aff.verdict === "YES"
-                          ? "text-emerald-400"
+                          ? isDarkMode ? "text-emerald-400" : "text-emerald-700"
                           : aff.verdict === "TIGHT"
-                            ? "text-amber-400"
-                            : "text-red-400"
+                            ? isDarkMode ? "text-amber-400" : "text-amber-700"
+                            : isDarkMode ? "text-red-400" : "text-rose-700"
                       }`}
                       data-testid="step-verdict"
                     >
                       {aff.verdict} — Free Cash After Purchase: {formatPaiseINR(aff.net_after_purchase_paise)}
                     </p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-md text-xs font-mono bg-[#2C261E] text-[#E2C799]">
+                  <span className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold ${
+                    isDarkMode ? "bg-[#2C261E] text-[#E2C799]" : "bg-[#E6E1D8] text-[#4A3B2C]"
+                  }`}>
                     {aff.distinct_months} months ({aff.span_days}d)
                   </span>
                 </div>
 
                 {/* Step-by-step waterfall */}
-                <div className="rounded-xl bg-[#0F0E0B] border border-[#2C261E] divide-y divide-[#241F17] text-xs font-mono">
+                <div className={`rounded-xl border divide-y text-xs font-mono transition-colors ${
+                  isDarkMode
+                    ? "bg-[#0F0E0B] border-[#2C261E] divide-[#241F17]"
+                    : "bg-[#F7F5F0] border-[#DCD7CD] divide-[#E4DFD5]"
+                }`}>
                   <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-[#CFC4B6]">
+                    <span className={isDarkMode ? "text-[#CFC4B6]" : "text-[#5C4D3D]"}>
                       1. Current Closing Balance (balance)
                     </span>
-                    <span className="font-semibold text-white" data-testid="step-balance">
+                    <span className={`font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`} data-testid="step-balance">
                       {formatPaiseINR(aff.current_balance_paise)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between px-4 py-2.5">
                     <div>
-                      <span className="text-emerald-400">
+                      <span className={isDarkMode ? "text-emerald-400" : "text-emerald-700 font-semibold"}>
                         2. + Expected Monthly Income (median of last 3 months)
                       </span>
                       {aff.income_is_variable && (
-                        <span className="block text-[10px] text-[#A79A8A]">
+                        <span className={`block text-[10px] ${isDarkMode ? "text-[#A79A8A]" : "text-[#7A6B59]"}`}>
                           Range: {formatPaiseINR(aff.income_range_min_paise)} – {formatPaiseINR(aff.income_range_max_paise)}
                         </span>
                       )}
                     </div>
-                    <span className="font-semibold text-emerald-400" data-testid="step-income">
+                    <span className={`font-bold ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`} data-testid="step-income">
                       + {formatPaiseINR(aff.expected_income_paise)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-amber-300">
+                    <span className={isDarkMode ? "text-amber-300" : "text-amber-800 font-semibold"}>
                       3. − Committed Payments (from recurring detection)
                     </span>
-                    <span className="font-semibold text-amber-300" data-testid="step-committed">
+                    <span className={`font-bold ${isDarkMode ? "text-amber-300" : "text-amber-800"}`} data-testid="step-committed">
                       − {formatPaiseINR(aff.committed_payments_paise)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-amber-300">
+                    <span className={isDarkMode ? "text-amber-300" : "text-amber-800 font-semibold"}>
                       4. − Average Variable Spend (category averages)
                     </span>
-                    <span className="font-semibold text-amber-300" data-testid="step-variable">
+                    <span className={`font-bold ${isDarkMode ? "text-amber-300" : "text-amber-800"}`} data-testid="step-variable">
                       − {formatPaiseINR(aff.average_variable_spend_paise)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between px-4 py-2.5">
                     <div>
-                      <span className="text-sky-300">
+                      <span className={isDarkMode ? "text-sky-300" : "text-sky-800 font-semibold"}>
                         5. − Safety Buffer ({aff.safety_buffer_rule})
                       </span>
                     </div>
-                    <span className="font-semibold text-sky-300" data-testid="step-buffer">
+                    <span className={`font-bold ${isDarkMode ? "text-sky-300" : "text-sky-800"}`} data-testid="step-buffer">
                       − {formatPaiseINR(aff.safety_buffer_paise)}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#161512]">
-                    <span className="text-[#CFC4B6]">
+                  <div className={`flex items-center justify-between px-4 py-2.5 transition-colors ${
+                    isDarkMode ? "bg-[#161512]" : "bg-[#EDE9E1]"
+                  }`}>
+                    <span className={`font-semibold ${isDarkMode ? "text-[#CFC4B6]" : "text-[#4A3B2C]"}`}>
                       = Safe Spendable Headroom Before Purchase
                     </span>
-                    <span className="font-bold text-white" data-testid="step-headroom">
+                    <span className={`font-bold ${isDarkMode ? "text-white" : "text-[#241F17]"}`} data-testid="step-headroom">
                       {formatPaiseINR(aff.free_cash_before_purchase_paise)}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#1D1913]">
-                    <span className="text-[#E2C799] font-semibold">
+                  <div className={`flex items-center justify-between px-4 py-2.5 transition-colors ${
+                    isDarkMode ? "bg-[#1D1913]" : "bg-[#E5DFD5]"
+                  }`}>
+                    <span className={`font-bold ${isDarkMode ? "text-[#E2C799]" : "text-[#35291C]"}`}>
                       6. Net Headroom After {formatPaiseINR(aff.target_amount_paise)} Purchase
                     </span>
-                    <span className="font-bold text-emerald-400" data-testid="step-net">
+                    <span
+                      className={`font-bold ${
+                        aff.net_after_purchase_paise >= 0
+                          ? isDarkMode ? "text-emerald-400" : "text-emerald-700"
+                          : isDarkMode ? "text-rose-400" : "text-rose-700"
+                      }`}
+                      data-testid="step-net"
+                    >
                       {formatPaiseINR(aff.net_after_purchase_paise)}
                     </span>
                   </div>
@@ -518,12 +591,14 @@ export const AffordabilityWorkspace: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Spend by Category */}
             <div
-              className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-5 space-y-3"
+              className={`card-z rounded-2xl p-5 space-y-3 border transition-colors ${
+                isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+              }`}
               data-testid="spend-by-category"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Spend by Category</h3>
-                <span className="text-[11px] font-mono text-[#A79A8A]">
+                <h3 className={`text-sm font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>Spend by Category</h3>
+                <span className={`text-[11px] font-mono ${isDarkMode ? "text-[#A79A8A]" : "text-[#7A6B59]"}`}>
                   {spendByCategory.length} categories
                 </span>
               </div>
@@ -532,7 +607,7 @@ export const AffordabilityWorkspace: React.FC = () => {
                   Upload statements to view spend breakdown by category.
                 </p>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                   {spendByCategory.map((item) => (
                     <div key={item.category} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
@@ -557,19 +632,21 @@ export const AffordabilityWorkspace: React.FC = () => {
 
             {/* Monthly Trend */}
             <div
-              className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-5 space-y-3"
+              className={`card-z rounded-2xl p-5 space-y-3 border transition-colors ${
+                isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+              }`}
               data-testid="monthly-trend"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Monthly Trend</h3>
-                <span className="text-[11px] font-mono text-[#A79A8A]">Income vs Spend</span>
+                <h3 className={`text-sm font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>Monthly Trend</h3>
+                <span className={`text-[11px] font-mono ${isDarkMode ? "text-[#A79A8A]" : "text-[#7A6B59]"}`}>Income vs Spend</span>
               </div>
               {monthlyTrend.length === 0 ? (
                 <p className="text-xs text-[#A79A8A] py-6 text-center">
                   Upload statements to view monthly cashflow trend.
                 </p>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                   {monthlyTrend.map((m) => (
                     <div key={m.month} className="space-y-1 text-xs">
                       <div className="flex items-center justify-between font-mono">
@@ -604,13 +681,15 @@ export const AffordabilityWorkspace: React.FC = () => {
 
           {/* Weekly Balance Forecast */}
           <div
-            className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-5 space-y-3"
+            className={`card-z rounded-2xl p-5 space-y-3 border transition-colors ${
+              isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+            }`}
             data-testid="weekly-forecast"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold text-white">
+                <TrendingUp className="w-4 h-4 text-emerald-500" />
+                <h3 className={`text-sm font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
                   4-Week Projected Balance
                 </h3>
               </div>
@@ -620,11 +699,11 @@ export const AffordabilityWorkspace: React.FC = () => {
                 Upload statements to generate 4-week balance projection with 80% confidence intervals.
               </p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 {Array.isArray(forecast) && forecast.map((pt, idx) => (
                   <div
                     key={pt.week_start}
-                    className="rounded-xl bg-[#0F0E0B] border border-[#2C261E] p-3 space-y-1"
+                    className="rounded-xl bg-[#0F0E0B] border border-[#2C261E] p-3 space-y-1.5 flex flex-col justify-between"
                   >
                     <p className="text-[10px] font-mono text-[#A79A8A]">
                       Week {idx + 1} ({pt.week_start})
@@ -632,7 +711,7 @@ export const AffordabilityWorkspace: React.FC = () => {
                     <p className="text-sm font-bold font-mono text-emerald-400">
                       {formatPaiseINR(pt.point_paise)}
                     </p>
-                    <p className="text-[10px] font-mono text-[#8A7C6D]">
+                    <p className="text-[10px] font-mono text-[#8A7C6D] truncate" title={`80% PI: ${formatPaiseINR(pt.lo80_paise)} – ${formatPaiseINR(pt.hi80_paise)}`}>
                       80% PI: {formatPaiseINR(pt.lo80_paise)} – {formatPaiseINR(pt.hi80_paise)}
                     </p>
                   </div>
@@ -647,13 +726,15 @@ export const AffordabilityWorkspace: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recurring Subscriptions Panel */}
         <section
-          className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-6 space-y-4"
+          className={`card-z rounded-2xl p-6 space-y-4 border transition-colors ${
+            isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+          }`}
           data-testid="recurring-panel"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-[#D4A373]" />
-              <h2 className="text-base font-semibold text-white">
+              <Calendar className={`w-4 h-4 ${isDarkMode ? "text-[#D4A373]" : "text-[#8C5E32]"}`} />
+              <h2 className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
                 Recurring Payments & Subscriptions
               </h2>
             </div>
@@ -697,13 +778,15 @@ export const AffordabilityWorkspace: React.FC = () => {
 
         {/* Anomaly Panel */}
         <section
-          className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-6 space-y-4"
+          className={`card-z rounded-2xl p-6 space-y-4 border transition-colors ${
+            isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+          }`}
           data-testid="anomaly-panel"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
-              <h2 className="text-base font-semibold text-white">
+              <ShieldAlert className="w-4 h-4 text-rose-500" />
+              <h2 className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
                 Anomalies & Duplicate Alerts
               </h2>
             </div>
@@ -744,12 +827,14 @@ export const AffordabilityWorkspace: React.FC = () => {
 
       {/* Row 3: Merged & De-duplicated Transactions Table with Inline Category Correction */}
       <section
-        className="card-z rounded-2xl bg-[#161512] border border-[#2C261E] p-6 space-y-4"
+        className={`card-z rounded-2xl p-6 space-y-4 border transition-colors ${
+          isDarkMode ? "bg-[#161512] border-[#2C261E]" : "bg-white border-[#E3DFD8] shadow-sm"
+        }`}
         data-testid="transactions-panel"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold text-white">
+            <h2 className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-[#241F17]"}`}>
               Merged & De-duplicated Ledger ({txns.length} transactions)
             </h2>
             <p className="text-xs text-[#A79A8A]">
@@ -824,6 +909,50 @@ export const AffordabilityWorkspace: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Confirmation Modal: Reset Data */}
+      {showWipeModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowWipeModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        >
+          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-base font-bold text-white">Reset Ledger & Ingested Data?</h3>
+              </div>
+              <button
+                onClick={() => setShowWipeModal(false)}
+                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-[#A79A8A] leading-relaxed">
+              This will clear all ingested bank statement transactions, detected subscriptions, and current affordability cache. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
+              <button
+                onClick={() => setShowWipeModal(false)}
+                className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleWipe}
+                disabled={loading}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition"
+              >
+                Yes, Reset All Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useFinancial } from "@/context/FinancialContext";
 import { Sidebar } from "@/components/Sidebar";
+import { OnboardingStatementModal } from "@/components/OnboardingStatementModal";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDarkMode } = useFinancial();
@@ -32,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }`}
     >
       <Sidebar />
+      <OnboardingStatementModal />
       <main className="flex-1 min-w-0 h-screen overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-7xl mx-auto">
           {children}

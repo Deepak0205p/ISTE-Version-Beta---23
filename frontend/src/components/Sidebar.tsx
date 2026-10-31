@@ -125,7 +125,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`relative flex flex-col border-r transition-all duration-300 select-none z-30 ${
+      className={`relative flex flex-col shrink-0 border-r transition-all duration-300 select-none z-30 ${
         isCollapsed ? 'w-20' : 'w-72'
       } ${
         isDarkMode
@@ -334,7 +334,7 @@ export const Sidebar: React.FC = () => {
 
       {/* Login / Sign Up Modal */}
       <Dialog open={authModalOpen} onOpenChange={setAuthModalOpen}>
-        <DialogContent className="p-0 border-0 bg-transparent max-w-md shadow-2xl">
+        <DialogContent showCloseButton={false} className="p-0 border-0 bg-transparent max-w-md shadow-none">
           <AuthModal onClose={() => setAuthModalOpen(false)} />
         </DialogContent>
       </Dialog>
