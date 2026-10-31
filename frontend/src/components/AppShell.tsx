@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useFinancial } from "@/context/FinancialContext";
 import { Sidebar } from "@/components/Sidebar";
 
@@ -14,29 +14,15 @@ export function AppShell({
   noPadding?: boolean;
 }) {
   const { isDarkMode } = useFinancial();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex items-center justify-center font-mono text-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-4 h-4 rounded-full border-2 border-[#16A579] border-t-transparent animate-spin" />
-          <span>Loading Money Matters...</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
-      className={`min-h-screen flex transition-colors duration-200 ${isDarkMode
-          ? "dark bg-[#0F172A] text-[#F8FAFC]"
-          : "light bg-[#F8FAFC] text-[#0F172A]"
-        }`}
+      suppressHydrationWarning
+      className={`min-h-screen flex transition-colors duration-200 ${
+        isDarkMode
+          ? "dark bg-[#121008] text-[#F8F7F4]"
+          : "light bg-[#F8F7F4] text-[#29241E]"
+      }`}
     >
       <Sidebar />
       <main
