@@ -5,7 +5,9 @@ import { TransactionRecord } from '../types';
 import { categorizeDescriptor } from '../utils/merchantLexicon';
 import { auditRunningBalanceChain, StatementChainAuditReport } from '../utils/statementAudit';
 import { evaluatePreFlightSufficiency, PreFlightStatus } from '../utils/anomalyEngine';
+import { GmailStatementSync } from './GmailStatementSync';
 import {
+  Mail,
   Landmark,
   FileSpreadsheet,
   ArrowUpRight,
@@ -52,7 +54,7 @@ export const BankingModule: React.FC = () => {
     currentUser
   } = useFinancial();
 
-  const [activeTab, setActiveTab] = useState<'statement-analysis' | 'transactions' | 'accounts' | 'import' | 'audit-gatekeeper'>('statement-analysis');
+  const [activeTab, setActiveTab] = useState<'statement-analysis' | 'transactions' | 'accounts' | 'import' | 'audit-gatekeeper' | 'gmail-sync'>('statement-analysis');
   const [searchTx, setSearchTx] = useState('');
   const [filterAccount, setFilterAccount] = useState('ALL');
 
@@ -231,6 +233,16 @@ export const BankingModule: React.FC = () => {
             }`}
           >
             <ShieldCheck size={14} /> Pre-Flight & Chain Audit
+          </button>
+          <button
+            onClick={() => setActiveTab('gmail-sync')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
+              activeTab === 'gmail-sync'
+                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
+                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
+            }`}
+          >
+            <Mail size={14} /> Gmail Auto-Fetch
           </button>
         </div>
 
@@ -824,6 +836,9 @@ export const BankingModule: React.FC = () => {
           )))}
         </div>
       )}
+
+      {/* 6. GMAIL STATEMENT SYNC PIPELINE */}
+      {activeTab === 'gmail-sync' && <GmailStatementSync />}
 
       {/* Modal: Add Bank Account */}
       {showAddAccountModal && (

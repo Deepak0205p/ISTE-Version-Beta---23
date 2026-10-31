@@ -1,7 +1,17 @@
 import os
+from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 from dotenv import load_dotenv
+
+for env_path in [
+    Path(__file__).parent.parent / "backend" / ".env",
+    Path(__file__).parent.parent / ".env",
+    Path("backend/.env"),
+    Path(".env"),
+]:
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -10,8 +20,6 @@ from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build, Resource
-
-load_dotenv()
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -58,7 +66,7 @@ def get_oauth_client_config() -> Dict[str, Any]:
     if not client_id or not client_secret:
         raise OAuthConfigurationError(
             "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET environment variables. "
-            "Please configure your OAuth credentials."
+            "Please configure your Google OAuth 2.0 credentials in backend/.env"
         )
 
     return {
@@ -90,92 +98,85 @@ def create_oauth_flow(state: Optional[str] = None) -> Flow:
 
 def generate_authorization_url(user_id: str) -> str:
     """
-    Generates offline-access consent URL with user_id encapsulated in state.
+    Generates a Google OAuth 2.0 consent URL for a specific user.
     """
     if not user_id or not user_id.strip():
-        raise ValueError("userId is required to generate the authorization URL.")
+        raise ValueError("A valid user_id is required to generate the authorization URL.")
 
     flow = create_oauth_flow(state=user_id)
-    auth_url, _ = flow.authorization_url(
+    authorization_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent",
         include_granted_scopes="true"
     )
-    return auth_url
+    return authorization_url
 
 
 def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
     """
-    Exchanges authorization code for credentials and saves them idempotently in Firestore.
+    Exchanges authorization code for credentials and securely persists
+    them in Firestore under users/{userId}/tokens/gmail.
     """
     if not code:
-        raise ValueError("Authorization code is missing in callback request.")
+        raise ValueError("Authorization code is missing from callback.")
     if not state:
-        raise ValueError("State parameter (userId) is missing in callback request.")
+        raise ValueError("Missing state (userId) in callback payload.")
 
-    user_id = state.strip()
+    user_id = state
     flow = create_oauth_flow(state=user_id)
-    flow.fetch_token(code=code)
 
+    # Allow insecure transport in development localhost environments
+    if os.environ.get("NODE_ENV") != "production":
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
+    flow.fetch_token(code=code)
     credentials = flow.credentials
-    if not credentials.refresh_token:
-        # Check if user already had a refresh token saved
-        db = get_firestore_client()
-        existing_doc = db.collection("users").document(user_id).collection("tokens").document("gmail").get()
-        if existing_doc.exists and "refresh_token" in existing_doc.to_dict():
-            refresh_token = existing_doc.to_dict()["refresh_token"]
-        else:
-            raise ValueError(
-                "Google did not return a refresh_token and no existing token was found. "
-                "Ensure prompt='consent' and access_type='offline' are configured."
-            )
-    else:
-        refresh_token = credentials.refresh_token
 
     token_data = {
-        "refresh_token": refresh_token,
-        "token_uri": credentials.token_uri or "https://oauth2.googleapis.com/token",
+        "refresh_token": credentials.refresh_token,
+        "token_uri": credentials.token_uri,
         "client_id": credentials.client_id,
         "client_secret": credentials.client_secret,
-        "scopes": credentials.scopes,
-        "updatedAt": datetime.utcnow().isoformat(),
-        "status": "ACTIVE"
+        "updatedAt": datetime.utcnow().isoformat()
     }
 
     db = get_firestore_client()
-    doc_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
-    doc_ref.set(token_data, merge=True)
+    token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
+    token_ref.set(token_data, merge=True)
 
     return {
         "success": True,
         "userId": user_id,
-        "message": "Gmail account connected and credentials stored securely."
+        "message": "Gmail tokens saved successfully."
     }
 
 
 def get_user_gmail_service(user_id: str) -> Resource:
     """
-    Retrieves stored refresh token from Firestore for user, refreshes credentials,
-    and returns an active googleapiclient Gmail service instance.
+    Fetches the user's stored refresh token from Firestore, refreshes it,
+    and returns an initialized Google Gmail API service resource.
     """
+    if not user_id:
+        raise ValueError("userId is required to fetch Gmail credentials.")
+
     db = get_firestore_client()
-    doc_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
-    snapshot = doc_ref.get()
+    token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
+    snap = token_ref.get()
 
-    if not snapshot.exists:
-        raise TokenNotFoundError(f"No Gmail credentials found for user '{user_id}'. Authorization required.")
+    if not snap.exists:
+        raise TokenNotFoundError(f"No Gmail authorization tokens found for user '{user_id}'.")
 
-    data = snapshot.to_dict()
+    data = snap.to_dict() or {}
     refresh_token = data.get("refresh_token")
     client_id = data.get("client_id") or os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = data.get("client_secret") or os.environ.get("GOOGLE_CLIENT_SECRET")
-    token_uri = data.get("token_uri", "https://oauth2.googleapis.com/token")
+    token_uri = data.get("token_uri") or "https://oauth2.googleapis.com/token"
 
     if not refresh_token:
-        raise TokenNotFoundError(f"Stored token for user '{user_id}' does not contain a valid refresh_token.")
+        raise TokenNotFoundError(f"Stored token document for '{user_id}' does not contain a refresh_token.")
 
     creds = Credentials(
-        token=None,  # Forces refresh
+        token=None,
         refresh_token=refresh_token,
         token_uri=token_uri,
         client_id=client_id,
@@ -186,11 +187,9 @@ def get_user_gmail_service(user_id: str) -> Resource:
     try:
         creds.refresh(Request())
     except RefreshError as re:
-        # Update status in Firestore to alert about token revocation
-        doc_ref.update({"status": "REVOKED", "revokedAt": datetime.utcnow().isoformat()})
-        raise TokenRevokedOrInvalidError(
-            f"Failed to refresh Google OAuth token for user '{user_id}'. Token may have been revoked: {str(re)}"
-        )
+        raise TokenRevokedOrInvalidError(f"Failed to refresh user credentials: {re}")
+    except Exception as e:
+        raise TokenRevokedOrInvalidError(f"Unexpected error refreshing credentials: {e}")
 
-    # Return authenticated Google Gmail v1 client
-    return build("gmail", "v1", credentials=creds)
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    return service
