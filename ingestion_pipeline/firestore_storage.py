@@ -14,7 +14,12 @@ class FirestoreStatementRepository:
     Ensures safe, duplicate-proof re-ingestion.
     """
     def __init__(self, service_account_path: Optional[str] = None):
-        self.service_account_path = service_account_path or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+        self.service_account_path = (
+            service_account_path
+            or os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+            or os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+        )
+        self.project_id = os.environ.get("FIREBASE_PROJECT_ID") or "money-matters-207e8"
         self._init_firebase()
         self.db = firestore.client()
 
@@ -22,10 +27,10 @@ class FirestoreStatementRepository:
         if not firebase_admin._apps:
             if self.service_account_path and os.path.exists(self.service_account_path):
                 cred = credentials.Certificate(self.service_account_path)
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred, {"projectId": self.project_id})
             else:
-                # Fallback to Application Default Credentials
-                firebase_admin.initialize_app()
+                # Fallback to Application Default Credentials with explicit projectId
+                firebase_admin.initialize_app(options={"projectId": self.project_id})
 
     @staticmethod
     def generate_statement_id(statement: StatementData) -> str:

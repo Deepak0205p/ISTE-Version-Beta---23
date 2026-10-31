@@ -18,14 +18,20 @@ GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 def get_firestore_client() -> firestore.firestore.Client:
     """
     Initializes and returns the shared Cloud Firestore client.
+    Reads credentials from FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH,
+    falling back to FIREBASE_PROJECT_ID configuration.
     """
     if not firebase_admin._apps:
-        service_account_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+        service_account_path = (
+            os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+            or os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+        )
+        project_id = os.environ.get("FIREBASE_PROJECT_ID") or "money-matters-207e8"
         if service_account_path and os.path.exists(service_account_path):
             cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred)
+            firebase_admin.initialize_app(cred, {"projectId": project_id})
         else:
-            firebase_admin.initialize_app()
+            firebase_admin.initialize_app(options={"projectId": project_id})
     return firestore.client()
 
 
