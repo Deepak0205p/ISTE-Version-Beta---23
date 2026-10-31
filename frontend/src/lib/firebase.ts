@@ -79,6 +79,44 @@ export async function syncUserToFirestore(user: User) {
   }
 }
 
+/**
+ * Sync complete financial profile to Firestore for real-time personalization
+ */
+export async function syncFinancialProfileToFirestore(userId: string, profileData: Record<string, any>) {
+  try {
+    const { db } = await getFirebase();
+    const profileRef = doc(db, "financial_profiles", userId);
+    await setDoc(
+      profileRef,
+      {
+        userId,
+        ...profileData,
+        lastSyncedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("[firestore] Could not sync financial profile to cloud:", err);
+  }
+}
+
+/**
+ * Save chat session or message to Firestore
+ */
+export async function saveChatMessageToFirestore(userId: string, message: { sender: string; text: string; id: string; timestamp: string; sources?: any[] }) {
+  try {
+    const { db } = await getFirebase();
+    const chatDocRef = doc(db, "advisor_chats", `${userId}_${message.id}`);
+    await setDoc(chatDocRef, {
+      userId,
+      ...message,
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[firestore] Could not save chat to cloud:", err);
+  }
+}
+
 export {
   GoogleAuthProvider,
   signInWithPopup,

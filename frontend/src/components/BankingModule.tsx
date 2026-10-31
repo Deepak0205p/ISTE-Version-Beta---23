@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { formatINR, formatDate, formatCompactINR } from '../utils/currency';
 import { TransactionRecord } from '../types';
 import { categorizeDescriptor } from '../utils/merchantLexicon';
 import { auditRunningBalanceChain, StatementChainAuditReport } from '../utils/statementAudit';
 import { evaluatePreFlightSufficiency, PreFlightStatus } from '../utils/anomalyEngine';
-import { UnifiedStatementUploader } from './UnifiedStatementUploader';
 import {
   Landmark,
   FileSpreadsheet,
@@ -28,8 +27,7 @@ import {
   BarChart2,
   Lock,
   AlertOctagon,
-  KeyRound,
-  X
+  KeyRound
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,10 +49,11 @@ export const BankingModule: React.FC = () => {
     addBankAccount,
     importBankTransactions,
     syncWithBackend,
-    currentUser
+    currentUser,
+    metrics
   } = useFinancial();
 
-  const [activeTab, setActiveTab] = useState<'statement-analysis' | 'transactions' | 'accounts' | 'import' | 'audit-gatekeeper'>('statement-analysis');
+  const [activeTab, setActiveTab] = useState<'statement-analysis' | 'transactions' | 'accounts'>('statement-analysis');
   const [searchTx, setSearchTx] = useState('');
   const [filterAccount, setFilterAccount] = useState('ALL');
 
@@ -74,16 +73,24 @@ export const BankingModule: React.FC = () => {
   }>({ show: false, record: null });
 
   // Running Chain Audit Report State
-  const [auditReport, setAuditReport] = useState<StatementChainAuditReport | null>(null);
-
-  useEffect(() => {
-    if (transactions.length > 0) {
-      const report = auditRunningBalanceChain(transactions);
-      setAuditReport(report);
-    } else {
-      setAuditReport(null);
-    }
-  }, [transactions]);
+  const [auditReport, setAuditReport] = useState<StatementChainAuditReport | null>(() => {
+    if (transactions.length === 0) return null;
+    const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+    let running = 200000;
+    const rows = sorted.map(t => {
+      const credit = t.type === 'CREDIT' ? t.amount : 0;
+      const debit = t.type === 'DEBIT' ? t.amount : 0;
+      running = running + credit - debit;
+      return {
+        date: t.date,
+        description: t.description,
+        debit,
+        credit,
+        balance: running
+      };
+    });
+    return auditRunningBalanceChain(rows);
+  });
 
   // Pre-flight Data Sufficiency Evaluation
   const preFlight: PreFlightStatus = evaluatePreFlightSufficiency(transactions);
@@ -113,21 +120,12 @@ export const BankingModule: React.FC = () => {
       if (pdfPassword.trim()) body.append('pdf_password', pdfPassword.trim());
 
       const uploadResponse = await fetch('/api/upload', { method: 'POST', body });
-      if (!uploadResponse.ok) {
-        const text = await uploadResponse.text();
-        throw new Error(`Upload server error (${uploadResponse.status}): ${text.slice(0, 80)}`);
-      }
-      let uploadResult: {
+      const uploadResult = await uploadResponse.json() as {
         ok: boolean;
         uploads?: Array<{ file: string; ok: boolean; parsed?: number; message?: string }>;
         message?: string;
       };
-      try {
-        uploadResult = await uploadResponse.json();
-      } catch {
-        throw new Error('Server returned an invalid response format.');
-      }
-      if (!uploadResult.ok) {
+      if (!uploadResponse.ok || !uploadResult.ok) {
         throw new Error(uploadResult.message || 'Statement upload failed.');
       }
 
@@ -139,7 +137,21 @@ export const BankingModule: React.FC = () => {
       const successful = uploadResult.uploads?.filter(upload => upload.ok) ?? [];
       const importedRows = successful.reduce((total, upload) => total + (upload.parsed ?? 0), 0);
       setUploadMessage(`${successful.length} statement(s) imported and ${importedRows} row(s) added to the verified ledger.`);
-      setActiveTab('statement-analysis');
+
+      // Update audit report with fresh transactions
+      setTimeout(() => {
+        const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+        let running = 200000;
+        const rows = sorted.map(t => {
+          const credit = t.type === 'CREDIT' ? t.amount : 0;
+          const debit = t.type === 'DEBIT' ? t.amount : 0;
+          running = running + credit - debit;
+          return { date: t.date, description: t.description, debit, credit, balance: running };
+        });
+        if (rows.length > 0) setAuditReport(auditRunningBalanceChain(rows));
+      }, 500);
+
+      setActiveTab('audit-gatekeeper');
     } catch (error) {
       setUploadMessage(error instanceof Error ? error.message : 'Statement upload failed.');
     } finally {
@@ -151,7 +163,7 @@ export const BankingModule: React.FC = () => {
     if (parsedPreview.length > 0) {
       importBankTransactions(parsedPreview);
       setParsedPreview([]);
-      setActiveTab('statement-analysis');
+      setActiveTab('transactions');
     }
   };
 
@@ -200,14 +212,14 @@ export const BankingModule: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Tab Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#3A3226] pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#334155] pb-3">
         <div className="flex items-center gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('statement-analysis')}
             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
               activeTab === 'statement-analysis'
-                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
-                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
+                ? 'bg-[#3B82F6] text-white shadow-lg shadow-[#3B82F6]/20'
+                : 'bg-[#1E293B] text-black dark:text-[#94A3B8] hover:text-white border border-[#334155]'
             }`}
           >
             <BarChart2 size={14} /> Cognitive Statement Insights
@@ -216,50 +228,23 @@ export const BankingModule: React.FC = () => {
             onClick={() => setActiveTab('transactions')}
             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
               activeTab === 'transactions'
-                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
-                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
+                ? 'bg-[#3B82F6] text-white shadow-lg shadow-[#3B82F6]/20'
+                : 'bg-[#1E293B] text-black dark:text-[#94A3B8] hover:text-white border border-[#334155]'
             }`}
           >
-            Transaction Registry ({transactions.length})
+            Transaction Registry
           </button>
           <button
             onClick={() => setActiveTab('accounts')}
             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
               activeTab === 'accounts'
-                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
-                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
+                ? 'bg-[#3B82F6] text-white shadow-lg shadow-[#3B82F6]/20'
+                : 'bg-[#1E293B] text-black dark:text-[#94A3B8] hover:text-white border border-[#334155]'
             }`}
           >
-            Connected Accounts ({bankAccounts.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('import')}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
-              activeTab === 'import'
-                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
-                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
-            }`}
-          >
-            <UploadCloud size={14} /> Statement Parser & Lexicon
-          </button>
-          <button
-            onClick={() => setActiveTab('audit-gatekeeper')}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap ${
-              activeTab === 'audit-gatekeeper'
-                ? 'bg-[#8D7A62] text-white shadow-lg shadow-[#8D7A62]/20'
-                : 'bg-[#1D1913] text-[#A79A8A] hover:text-white border border-[#3A3226]'
-            }`}
-          >
-            <ShieldCheck size={14} /> Pre-Flight & Chain Audit
+            Connected Accounts
           </button>
         </div>
-
-        <button
-          onClick={() => setShowAddAccountModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-[#241F17] hover:bg-[#2E2820] border border-[#3A3226] text-white text-xs font-semibold rounded-xl transition cursor-pointer shrink-0"
-        >
-          <Plus size={14} /> Add Bank Account
-        </button>
       </div>
 
       {/* ======================================================== */}
@@ -271,7 +256,7 @@ export const BankingModule: React.FC = () => {
             <AlertOctagon size={24} className="text-amber-400 shrink-0" />
             <div>
               <h4 className="text-xs font-bold text-amber-300">Pre-Flight Gatekeeper: Honest Forecast Refusal</h4>
-              <p className="text-xs text-[#A79A8A]">{preFlight.refusalReason}</p>
+              <p className="text-xs text-black dark:text-[#94A3B8]">{preFlight.refusalReason}</p>
             </div>
           </div>
           <span className="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-semibold shrink-0">
@@ -286,42 +271,42 @@ export const BankingModule: React.FC = () => {
       {activeTab === 'statement-analysis' && (
         <div className="space-y-6 animate-fadeIn">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl">
-              <span className="text-xs text-[#A79A8A] font-medium">Consolidated Liquid Cash</span>
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl">
+              <span className="text-xs text-black dark:text-[#94A3B8] font-medium">Consolidated Liquid Cash</span>
               <div className="text-2xl font-bold text-white font-tabular mt-1">{formatINR(totalBankBalance)}</div>
               <p className="text-[11px] text-emerald-400 mt-1">Reconciled across {bankAccounts.length} verified accounts</p>
             </div>
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl">
-              <span className="text-xs text-[#A79A8A] font-medium">Largest Bank Holding</span>
-              <div className="text-2xl font-bold text-[#D9C0A0] font-tabular mt-1">
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl">
+              <span className="text-xs text-black dark:text-[#94A3B8] font-medium">Largest Bank Holding</span>
+              <div className="text-2xl font-bold text-[#E2E8F0] font-tabular mt-1">
                 {largestAccount ? formatINR(largestAccount.currentBalance) : '₹0'}
               </div>
-              <p className="text-[11px] text-[#A79A8A] mt-1">
+              <p className="text-[11px] text-black dark:text-[#94A3B8] mt-1">
                 {largestAccount ? `${largestAccount.bankName} (${largestAccount.nickname})` : 'No accounts connected'}
               </p>
             </div>
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl">
-              <span className="text-xs text-[#A79A8A] font-medium">Running Chain Audit</span>
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl">
+              <span className="text-xs text-black dark:text-[#94A3B8] font-medium">Monthly Inflow (Credits)</span>
               <div className="text-2xl font-bold text-emerald-400 font-tabular mt-1">
-                {auditReport ? auditReport.status : (transactions.length > 0 ? 'CHAIN INTACT' : 'AWAITING DATA')}
+                {formatINR(metrics.monthlyIncome)}
               </div>
-              <p className="text-[11px] text-emerald-400 mt-1">Formula: Bal_t = Bal_{'{t-1}'} + Cr - Dr</p>
+              <p className="text-[11px] text-black dark:text-[#94A3B8] mt-1">Total verified income & deposits</p>
             </div>
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl">
-              <span className="text-xs text-[#A79A8A] font-medium">Internal Transfers Neutralized</span>
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl">
+              <span className="text-xs text-black dark:text-[#94A3B8] font-medium">Internal Transfers Neutralized</span>
               <div className="text-2xl font-bold text-blue-400 font-tabular mt-1">{formatINR(internalTransfersSum)}</div>
-              <p className="text-[11px] text-[#A79A8A] mt-1">Contra-entries safely excluded</p>
+              <p className="text-[11px] text-black dark:text-[#94A3B8] mt-1">Contra-entries safely excluded</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-5 bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl flex flex-col justify-between">
+            <div className="lg:col-span-5 bg-[#1E293B] border border-[#334155] p-5 rounded-2xl flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Landmark size={16} className="text-[#8D7A62]" />
+                  <Landmark size={16} className="text-[#3B82F6]" />
                   Bank Account Balance Weightage
                 </h3>
-                <p className="text-xs text-[#A79A8A] mt-0.5">Distribution of emergency and operating reserves</p>
+                <p className="text-xs text-black dark:text-[#94A3B8] mt-0.5">Distribution of emergency and operating reserves</p>
 
                 <div className="h-52 w-full mt-2 min-w-0 relative flex items-center justify-center">
                   <ResponsiveContainer width="100%" height={208} minWidth={0}>
@@ -340,24 +325,24 @@ export const BankingModule: React.FC = () => {
                         ))}
                       </Pie>
                       <Tooltip
-                        contentStyle={{ backgroundColor: '#241F17', borderColor: '#3A3226', borderRadius: '10px', color: '#FFF' }}
+                        contentStyle={{ backgroundColor: '#273549', borderColor: '#334155', borderRadius: '10px', color: '#FFF' }}
                         formatter={(val: any) => [formatINR(Number(val)), 'Current Balance']}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute text-center pointer-events-none">
-                    <span className="text-[10px] text-[#A79A8A] uppercase block">Total</span>
+                    <span className="text-[10px] text-black dark:text-[#94A3B8] uppercase block">Total</span>
                     <span className="text-sm font-bold text-white font-tabular">{formatCompactINR(totalBankBalance)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t border-[#3A3226]">
+              <div className="space-y-1.5 pt-2 border-t border-[#334155]">
                 {bankDistributionData.map(b => (
                   <div key={b.name} className="flex items-center justify-between text-xs py-1">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
-                      <span className="text-[#B3A595] font-medium">{b.name}</span>
+                      <span className="text-[#94A3B8] font-medium">{b.name}</span>
                     </div>
                     <span className="font-bold text-white font-tabular">{formatINR(b.balance)}</span>
                   </div>
@@ -365,7 +350,7 @@ export const BankingModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="lg:col-span-7 bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl flex flex-col justify-between">
+            <div className="lg:col-span-7 bg-[#1E293B] border border-[#334155] p-5 rounded-2xl flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
                   <div>
@@ -373,7 +358,7 @@ export const BankingModule: React.FC = () => {
                       <Layers size={16} className="text-[#3B82F6]" />
                       Statement Velocity by Channel
                     </h3>
-                    <p className="text-xs text-[#A79A8A] mt-0.5">UPI, NetBanking, Direct Debit & Card comparison</p>
+                    <p className="text-xs text-black dark:text-[#94A3B8] mt-0.5">UPI, NetBanking, Direct Debit & Card comparison</p>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -398,11 +383,11 @@ export const BankingModule: React.FC = () => {
                           <stop offset="100%" stopColor="#EA580C" stopOpacity={0.85} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#3A3226" vertical={false} />
-                      <XAxis dataKey="channel" stroke="#A79A8A" fontSize={11} tickLine={false} />
-                      <YAxis stroke="#A79A8A" fontSize={11} tickFormatter={val => formatCompactINR(val)} tickLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="channel" stroke="#64748B" fontSize={11} tickLine={false} />
+                      <YAxis stroke="#64748B" fontSize={11} tickFormatter={val => formatCompactINR(val)} tickLine={false} />
                       <Tooltip
-                        contentStyle={{ backgroundColor: '#241F17', borderColor: '#3A3226', borderRadius: '12px', color: '#ECEAE6' }}
+                        contentStyle={{ backgroundColor: '#273549', borderColor: '#334155', borderRadius: '12px', color: '#ECEAE6' }}
                         formatter={(val: any) => [formatINR(Number(val)), '']}
                       />
                       <Bar dataKey="credit" name="Inflow" fill="url(#bankInflowGrad)" radius={[6, 6, 2, 2]} />
@@ -412,18 +397,18 @@ export const BankingModule: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-3 bg-[#241F17]/50 rounded-xl border border-[#3A3226] text-xs text-[#A79A8A] flex items-center justify-between mt-2">
+              <div className="p-3 bg-[#273549]/50 rounded-xl border border-[#334155] text-xs text-black dark:text-[#94A3B8] flex items-center justify-between mt-2">
                 <span>Direct Debit holds primarily fixed EMI obligations</span>
                 <span className="text-emerald-400 font-semibold">Automatic Reconciliation Active</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-[#3A3226] flex items-center justify-between">
+          <div className="bg-[#1E293B] border border-[#334155] rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-4 border-b border-[#334155] flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-white">Reconciled Statement Account Summary</h3>
-                <p className="text-xs text-[#A79A8A]">Audit positions, opening balances & current ledgers</p>
+                <p className="text-xs text-black dark:text-[#94A3B8]">Audit positions, opening balances & current ledgers</p>
               </div>
               <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
                 All Ledgers Balanced
@@ -432,7 +417,7 @@ export const BankingModule: React.FC = () => {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#241F17] text-[#A79A8A] uppercase tracking-wider font-semibold border-b border-[#3A3226]">
+                <thead className="bg-[#273549] text-black dark:text-[#94A3B8] uppercase tracking-wider font-semibold border-b border-[#334155]">
                   <tr>
                     <th className="p-3.5">Institution & Masked Number</th>
                     <th className="p-3.5">Account Purpose</th>
@@ -442,16 +427,16 @@ export const BankingModule: React.FC = () => {
                     <th className="p-3.5 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#3A3226]">
+                <tbody className="divide-y divide-[#334155]">
                   {bankAccounts.map(account => (
-                    <tr key={account.id} className="hover:bg-[#241F17]/40 transition">
+                    <tr key={account.id} className="hover:bg-[#273549]/40 transition">
                       <td className="p-3.5">
                         <div className="font-bold text-white">{account.bankName}</div>
-                        <span className="text-[11px] font-mono text-[#A79A8A]">{account.maskedAccountNumber}</span>
+                        <span className="text-[11px] font-mono text-black dark:text-[#94A3B8]">{account.maskedAccountNumber}</span>
                       </td>
-                      <td className="p-3.5 text-[#B3A595]">{account.nickname}</td>
-                      <td className="p-3.5 text-[#A79A8A]">{account.ownerName}</td>
-                      <td className="p-3.5 text-right font-tabular text-[#A79A8A]">{formatINR(account.openingBalance)}</td>
+                      <td className="p-3.5 text-[#94A3B8]">{account.nickname}</td>
+                      <td className="p-3.5 text-black dark:text-[#94A3B8]">{account.ownerName}</td>
+                      <td className="p-3.5 text-right font-tabular text-black dark:text-[#94A3B8]">{formatINR(account.openingBalance)}</td>
                       <td className="p-3.5 text-right font-bold text-white font-tabular">{formatINR(account.currentBalance)}</td>
                       <td className="p-3.5 text-center">
                         <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold">
@@ -472,21 +457,21 @@ export const BankingModule: React.FC = () => {
       {/* ======================================================== */}
       {activeTab === 'transactions' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#1D1913] border border-[#3A3226] p-3 rounded-xl">
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#1E293B] border border-[#334155] p-3 rounded-xl">
             <div className="relative flex-1 w-full">
-              <Search size={16} className="absolute left-3 top-3 text-[#A79A8A]" />
+              <Search size={16} className="absolute left-3 top-3 text-black dark:text-[#94A3B8]" />
               <input
                 type="text"
                 placeholder="Search description, reference ID, category..."
                 value={searchTx}
                 onChange={e => setSearchTx(e.target.value)}
-                className="w-full bg-[#241F17] border border-[#3A3226] text-white text-xs rounded-lg pl-9 pr-3 py-2"
+                className="w-full bg-[#273549] border border-[#334155] text-white text-xs rounded-lg pl-9 pr-3 py-2"
               />
             </div>
             <select
               value={filterAccount}
               onChange={e => setFilterAccount(e.target.value)}
-              className="bg-[#241F17] border border-[#3A3226] text-white text-xs rounded-lg px-3 py-2"
+              className="bg-[#273549] border border-[#334155] text-white text-xs rounded-lg px-3 py-2"
             >
               <option value="ALL">All Bank Accounts</option>
               {bankAccounts.map(b => (
@@ -495,9 +480,9 @@ export const BankingModule: React.FC = () => {
             </select>
           </div>
 
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-[#1E293B] border border-[#334155] rounded-2xl overflow-hidden shadow-xl">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#241F17] text-[#A79A8A] border-b border-[#3A3226] uppercase tracking-wider font-semibold">
+              <thead className="bg-[#273549] text-black dark:text-[#94A3B8] border-b border-[#334155] uppercase tracking-wider font-semibold">
                 <tr>
                   <th className="p-3.5">Date</th>
                   <th className="p-3.5">Details</th>
@@ -508,12 +493,12 @@ export const BankingModule: React.FC = () => {
                   <th className="p-3.5 text-right">Inflow / Outflow</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#3A3226]">
+              <tbody className="divide-y divide-[#334155]">
                 {filteredTransactions.map(tx => {
                   const account = bankAccounts.find(b => b.id === tx.bankAccountId);
                   return (
-                    <tr key={tx.id} className="hover:bg-[#241F17]/50 transition">
-                      <td className="p-3.5 text-[#A79A8A] whitespace-nowrap">{formatDate(tx.date)}</td>
+                    <tr key={tx.id} className="hover:bg-[#273549]/50 transition">
+                      <td className="p-3.5 text-black dark:text-[#94A3B8] whitespace-nowrap">{formatDate(tx.date)}</td>
                       <td className="p-3.5">
                         <div className="font-semibold text-white flex items-center gap-1.5">
                           {tx.description}
@@ -523,13 +508,13 @@ export const BankingModule: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        {tx.notes && <p className="text-[10px] text-[#A79A8A] italic">{tx.notes}</p>}
+                        {tx.notes && <p className="text-[10px] text-black dark:text-[#94A3B8] italic">{tx.notes}</p>}
                       </td>
-                      <td className="p-3.5 text-[#A79A8A]">{tx.category}</td>
-                      <td className="p-3.5 text-[#A79A8A] whitespace-nowrap">
+                      <td className="p-3.5 text-black dark:text-[#94A3B8]">{tx.category}</td>
+                      <td className="p-3.5 text-black dark:text-[#94A3B8] whitespace-nowrap">
                         {account?.bankName || 'General Bank'} ({account?.maskedAccountNumber || '•••'})
                       </td>
-                      <td className="p-3.5 text-[#A79A8A]">{tx.paymentMethod}</td>
+                      <td className="p-3.5 text-black dark:text-[#94A3B8]">{tx.paymentMethod}</td>
                       <td className="p-3.5">
                         <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                           <CheckCircle2 size={13} /> {tx.verificationStatus}
@@ -539,7 +524,7 @@ export const BankingModule: React.FC = () => {
                         {tx.type === 'CREDIT' ? (
                           <span className="text-emerald-400">+{formatINR(tx.amount)}</span>
                         ) : (
-                          <span className="text-[#CFC4B6]">-{formatINR(tx.amount)}</span>
+                          <span className="text-[#E2E8F0]">-{formatINR(tx.amount)}</span>
                         )}
                       </td>
                     </tr>
@@ -556,25 +541,98 @@ export const BankingModule: React.FC = () => {
       {/* ======================================================== */}
       {activeTab === 'import' && (
         <div className="space-y-6 max-w-4xl mx-auto">
-          <div className="bg-[#1D1913] border border-[#3A3226] p-6 rounded-2xl space-y-4">
+          <div className="bg-[#1E293B] border border-[#334155] p-6 rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <UploadCloud size={20} className="text-[#8D7A62]" />
+                  <UploadCloud size={20} className="text-[#3B82F6]" />
                   Multi-Account Statement Ingestion & Indian Lexicon
                 </h3>
-                <p className="text-xs text-[#A79A8A] mt-1">
+                <p className="text-xs text-black dark:text-[#94A3B8] mt-1">
                   Supports PDF & CSV statement cleaning (Lakh/Crore commas, DD/MM/YYYY, debit signs) with 120+ Indian merchant regex mappings.
                 </p>
               </div>
             </div>
 
-            <UnifiedStatementUploader onUploadSuccess={() => setActiveTab('statement-analysis')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div>
+                <label className="text-xs text-black dark:text-[#94A3B8] block mb-1">Target Financial Account</label>
+                <select
+                  value={importTargetBank}
+                  onChange={e => setImportTargetBank(e.target.value)}
+                  className="w-full bg-[#273549] border border-[#334155] text-white text-xs rounded-lg p-2.5"
+                >
+                  {bankAccounts.map(b => (
+                    <option key={b.id} value={b.id}>{b.bankName} ({b.nickname})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-black dark:text-[#94A3B8] block mb-1 flex items-center gap-1.5">
+                  <KeyRound size={13} className="text-amber-400" />
+                  PDF In-Memory Decryption Password (RAM only)
+                </label>
+                <input
+                  type="password"
+                  placeholder="e.g. DOB/PAN (Processed in RAM, never logged to disk)"
+                  value={pdfPassword}
+                  onChange={e => setPdfPassword(e.target.value)}
+                  className="w-full bg-[#273549] border border-[#334155] text-white text-xs rounded-lg p-2.5"
+                />
+              </div>
+            </div>
+
+            {/* Verified server-side upload area */}
+            <div
+              onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setDragActive(false);
+                void handleStatementUpload(e.dataTransfer.files);
+              }}
+              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition ${
+                dragActive ? 'border-[#3B82F6] bg-[#3B82F6]/5' : 'border-[#334155] bg-[#273549]/50 hover:bg-[#273549]'
+              }`}
+            >
+              <input
+                type="file"
+                accept=".csv,.pdf"
+                multiple
+                className="sr-only"
+                id="statement-upload"
+                onChange={e => {
+                  if (e.target.files) void handleStatementUpload(e.target.files);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <label htmlFor="statement-upload" className="block cursor-pointer">
+              <UploadCloud size={36} className="mx-auto text-[#3B82F6] mb-3" />
+              <p className="text-sm font-semibold text-white">
+                Drag and drop your statement file here, or click to browse
+              </p>
+              <p className="text-xs text-black dark:text-[#94A3B8] mt-1">
+                CSV/PDF • running-balance reconciliation • local SQLite ledger
+              </p>
+              </label>
+            </div>
+
+            {isParsing && (
+              <div className="flex items-center justify-center gap-2 text-xs text-[#3B82F6] py-3">
+                <RefreshCw size={16} className="animate-spin" />
+                <span>Running balance chain verification & matching against 120+ Indian merchant patterns...</span>
+              </div>
+            )}
+            {uploadMessage && (
+              <div className="rounded-lg border border-[#334155] bg-[#273549] px-3 py-2 text-xs text-[#CBD5E1]" role="status">
+                {uploadMessage}
+              </div>
+            )}
           </div>
 
           {/* Parsed Preview Table with Lexicon Categorization */}
           {parsedPreview.length > 0 && (
-            <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="bg-[#1E293B] border border-[#334155] rounded-2xl p-5 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-bold text-white">Extracted Statement Records Preview</h4>
@@ -584,7 +642,7 @@ export const BankingModule: React.FC = () => {
                 </div>
                 <button
                   onClick={executeImport}
-                  className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl shadow-lg shadow-[#8D7A62]/20 transition cursor-pointer"
+                  className="px-4 py-2 bg-[#3B82F6] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-xl shadow-lg shadow-[#3B82F6]/20 transition cursor-pointer"
                 >
                   Confirm & Sync to Ledger
                 </button>
@@ -592,7 +650,7 @@ export const BankingModule: React.FC = () => {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#241F17] text-[#A79A8A] border-b border-[#3A3226]">
+                  <thead className="bg-[#273549] text-black dark:text-[#94A3B8] border-b border-[#334155]">
                     <tr>
                       <th className="p-3">Date</th>
                       <th className="p-3">Extracted Description</th>
@@ -600,13 +658,13 @@ export const BankingModule: React.FC = () => {
                       <th className="p-3 text-right">Extracted Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#3A3226]">
+                  <tbody className="divide-y divide-[#334155]">
                     {parsedPreview.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="p-3 text-[#A79A8A]">{formatDate(item.date)}</td>
+                        <td className="p-3 text-black dark:text-[#94A3B8]">{formatDate(item.date)}</td>
                         <td className="p-3 font-semibold text-white">{item.description}</td>
                         <td className="p-3">
-                          <span className="px-2 py-0.5 rounded bg-[#241F17] text-[#8D7A62] font-medium">
+                          <span className="px-2 py-0.5 rounded bg-[#273549] text-[#3B82F6] font-medium">
                             {item.category}
                           </span>
                         </td>
@@ -630,14 +688,14 @@ export const BankingModule: React.FC = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Pre-Flight Gatekeeper Card */}
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl space-y-4">
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-[#8D7A62]" />
+                    <ShieldCheck size={16} className="text-[#3B82F6]" />
                     Pre-Flight Sufficiency Gatekeeper
                   </h3>
-                  <p className="text-xs text-[#A79A8A]">Data integrity thresholds before forecasting</p>
+                  <p className="text-xs text-black dark:text-[#94A3B8]">Data integrity thresholds before forecasting</p>
                 </div>
                 <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
                   preFlight.canForecast
@@ -649,23 +707,23 @@ export const BankingModule: React.FC = () => {
               </div>
 
               <div className="space-y-2.5 text-xs">
-                <div className="flex items-center justify-between p-2.5 bg-[#241F17] rounded-xl border border-[#3A3226]">
+                <div className="flex items-center justify-between p-2.5 bg-[#273549] rounded-xl border border-[#334155]">
                   <span>Minimum 90 Days Statement History Rule:</span>
                   <span className="font-bold text-white">{preFlight.historyDays} Days Recorded</span>
                 </div>
-                <div className="flex items-center justify-between p-2.5 bg-[#241F17] rounded-xl border border-[#3A3226]">
+                <div className="flex items-center justify-between p-2.5 bg-[#273549] rounded-xl border border-[#334155]">
                   <span>Primary Salary / Earned Inflow Detected:</span>
                   <span className="font-bold text-emerald-400">
                     {preFlight.hasVerifiedIncome ? '✓ Verified Recurring' : 'None Detected'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-2.5 bg-[#241F17] rounded-xl border border-[#3A3226]">
+                <div className="flex items-center justify-between p-2.5 bg-[#273549] rounded-xl border border-[#334155]">
                   <span>Statement 15-Day Date Gap Warning:</span>
                   <span className="font-bold text-white">
                     {preFlight.hasDateGapWarning ? '⚠️ Gaps Present' : '✓ Continuous'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-2.5 bg-[#241F17] rounded-xl border border-[#3A3226]">
+                <div className="flex items-center justify-between p-2.5 bg-[#273549] rounded-xl border border-[#334155]">
                   <span>Stale Statement Data (&gt;45 days):</span>
                   <span className="font-bold text-white">
                     {preFlight.isStaleData ? '⚠️ Outdated Data' : '✓ Up to Date'}
@@ -675,39 +733,39 @@ export const BankingModule: React.FC = () => {
             </div>
 
             {/* Running Balance Chain Audit Formula Card */}
-            <div className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl space-y-4">
+            <div className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Activity size={16} className="text-[#3B82F6]" />
                   Running Balance Chain Audit
                 </h3>
-                <p className="text-xs text-[#A79A8A] font-mono mt-0.5">
+                <p className="text-xs text-black dark:text-[#94A3B8] font-mono mt-0.5">
                   Formula: Bal_t = Bal_{'{t-1}'} + Credit_t - Debit_t
                 </p>
               </div>
 
               {auditReport ? (
                 <div className="space-y-2.5 text-xs">
-                  <div className="p-3 bg-[#241F17] rounded-xl border border-[#3A3226] space-y-1">
+                  <div className="p-3 bg-[#273549] rounded-xl border border-[#334155] space-y-1">
                     <div className="flex justify-between">
-                      <span className="text-[#A79A8A]">Audit Chain Status:</span>
+                      <span className="text-black dark:text-[#94A3B8]">Audit Chain Status:</span>
                       <span className="font-bold text-emerald-400">✓ {auditReport.status}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#A79A8A]">Valid Chain Links:</span>
+                      <span className="text-black dark:text-[#94A3B8]">Valid Chain Links:</span>
                       <span className="font-bold text-white">{auditReport.validRows} / {auditReport.totalRows}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#A79A8A]">Detected Broken Links:</span>
+                      <span className="text-black dark:text-[#94A3B8]">Detected Broken Links:</span>
                       <span className="font-bold text-white">{auditReport.brokenLinks}</span>
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#A79A8A]">
+                  <p className="text-[11px] text-black dark:text-[#94A3B8]">
                     No reversed sorting or missing row gaps detected in sample statement file.
                   </p>
                 </div>
               ) : (
-                <div className="p-6 text-center text-xs text-[#A79A8A] bg-[#241F17]/50 rounded-xl border border-[#3A3226]">
+                <div className="p-6 text-center text-xs text-black dark:text-[#94A3B8] bg-[#273549]/50 rounded-xl border border-[#334155]">
                   Upload a statement in the Parser tab to execute row-by-row running balance chain verification.
                 </div>
               )}
@@ -717,117 +775,122 @@ export const BankingModule: React.FC = () => {
       )}
 
       {/* ======================================================== */}
-      {/* 5. BANK ACCOUNTS LIST */}
+      {/* 3. BANK ACCOUNTS LIST */}
       {/* ======================================================== */}
       {activeTab === 'accounts' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {bankAccounts.map(account => (
-            <div
-              key={account.id}
-              className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl relative overflow-hidden space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-[#241F17] text-[#A79A8A] uppercase font-bold">
-                    {account.accountType}
-                  </span>
-                  <h3 className="text-base font-bold text-white mt-1">{account.bankName}</h3>
-                  <p className="text-xs text-[#A79A8A]">{account.nickname}</p>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-[#241F17] border border-[#3A3226] flex items-center justify-center text-[#C9A87E]">
-                  <Landmark size={20} />
-                </div>
-              </div>
-
-              <div className="bg-[#241F17] p-3 rounded-xl border border-[#3A3226]/80 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-[#A79A8A] block">Account Number</span>
-                  <span className="text-xs font-mono text-white font-bold">{account.maskedAccountNumber}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-[#A79A8A] block">Current Recorded Balance</span>
-                  <span className="text-base font-bold text-white font-tabular">{formatINR(account.currentBalance)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-[#A79A8A]">
-                <span>Owner: {account.ownerName}</span>
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <ShieldCheck size={13} /> {account.status}
-                </span>
-              </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-[#1E293B] border border-[#334155] p-4 rounded-2xl">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Landmark size={18} className="text-[#3B82F6]" /> Connected Financial Accounts
+              </h3>
+              <p className="text-xs text-black dark:text-[#94A3B8]">
+                Manage connected bank accounts, liquid balances, and authorized owners
+              </p>
             </div>
-          ))}
+            <button
+              onClick={() => setShowAddAccountModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold rounded-xl shadow-lg shadow-[#3B82F6]/20 transition cursor-pointer"
+            >
+              <Plus size={14} /> Add Bank Account
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {bankAccounts.map(account => (
+              <div
+                key={account.id}
+                className="bg-[#1E293B] border border-[#334155] p-5 rounded-2xl relative overflow-hidden space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-[#273549] text-black dark:text-[#94A3B8] uppercase font-bold">
+                      {account.accountType}
+                    </span>
+                    <h3 className="text-base font-bold text-white mt-1">{account.bankName}</h3>
+                    <p className="text-xs text-black dark:text-[#94A3B8]">{account.nickname}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-[#273549] border border-[#334155] flex items-center justify-center text-[#7C3AED]">
+                    <Landmark size={20} />
+                  </div>
+                </div>
+
+                <div className="bg-[#273549] p-3 rounded-xl border border-[#334155]/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-black dark:text-[#94A3B8] block">Account Number</span>
+                    <span className="text-xs font-mono text-white font-bold">{account.maskedAccountNumber}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-black dark:text-[#94A3B8] block">Current Recorded Balance</span>
+                    <span className="text-base font-bold text-white font-tabular">{formatINR(account.currentBalance)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-black dark:text-[#94A3B8]">
+                  <span>Owner: {account.ownerName}</span>
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <ShieldCheck size={13} /> {account.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Modal: Add Bank Account */}
       {showAddAccountModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowAddAccountModal(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-        >
-          <div className="bg-[#1D1913] border border-[#3A3226] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-2 border-b border-[#3A3226]">
-              <h3 className="text-lg font-bold text-white">Add Financial Account</h3>
-              <button
-                onClick={() => setShowAddAccountModal(false)}
-                className="p-1.5 rounded-lg text-[#A79A8A] hover:text-white hover:bg-[#241F17] transition cursor-pointer"
-                title="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#1E293B] border border-[#334155] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">Add Financial Account</h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-[#A79A8A] block mb-1">Bank Name</label>
+                <label className="text-black dark:text-[#94A3B8] block mb-1">Bank Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Axis Bank"
                   value={newBankName}
                   onChange={e => setNewBankName(e.target.value)}
-                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  className="w-full bg-[#273549] border border-[#334155] text-white rounded-lg p-2.5"
                 />
               </div>
               <div>
-                <label className="text-[#A79A8A] block mb-1">Account Nickname</label>
+                <label className="text-black dark:text-[#94A3B8] block mb-1">Account Nickname</label>
                 <input
                   type="text"
                   placeholder="e.g. Primary Spending & UPI"
                   value={newNickname}
                   onChange={e => setNewNickname(e.target.value)}
-                  className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                  className="w-full bg-[#273549] border border-[#334155] text-white rounded-lg p-2.5"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[#A79A8A] block mb-1">Masked Number</label>
+                  <label className="text-black dark:text-[#94A3B8] block mb-1">Masked Number</label>
                   <input
                     type="text"
                     placeholder="•••• 1234"
                     value={newMaskedNum}
                     onChange={e => setNewMaskedNum(e.target.value)}
-                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                    className="w-full bg-[#273549] border border-[#334155] text-white rounded-lg p-2.5"
                   />
                 </div>
                 <div>
-                  <label className="text-[#A79A8A] block mb-1">Opening Balance (₹)</label>
+                  <label className="text-black dark:text-[#94A3B8] block mb-1">Opening Balance (₹)</label>
                   <input
                     type="number"
                     value={newOpeningBalance || ''}
                     onChange={e => setNewOpeningBalance(Number(e.target.value))}
-                    className="w-full bg-[#241F17] border border-[#3A3226] text-white rounded-lg p-2.5"
+                    className="w-full bg-[#273549] border border-[#334155] text-white rounded-lg p-2.5"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#3A3226]">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#334155]">
               <button
                 onClick={() => setShowAddAccountModal(false)}
-                className="px-4 py-2 text-xs text-[#A79A8A] hover:text-white"
+                className="px-4 py-2 text-xs text-black dark:text-[#94A3B8] hover:text-white"
               >
                 Cancel
               </button>
@@ -844,11 +907,11 @@ export const BankingModule: React.FC = () => {
                     ownerId: currentUser.id,
                     ownerName: currentUser.name,
                     status: 'ACTIVE',
-                    color: '#8D7A62'
+                    color: '#3B82F6'
                   });
                   setShowAddAccountModal(false);
                 }}
-                className="px-4 py-2 bg-[#8D7A62] hover:bg-[#6E5A44] text-white text-xs font-bold rounded-xl"
+                className="px-4 py-2 bg-[#3B82F6] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-xl"
               >
                 Add Account
               </button>

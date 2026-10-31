@@ -1,21 +1,15 @@
 /**
- * Storage repository:
- * - Local-first persistent JSON storage (.data/local_repository.json)
- * - Firebase Firestore cloud sync when credentials are provided
- * - Structured collections: accounts, transactions, category_aliases, verdicts, users
+ * Firebase Firestore repository representing structured SQL-like collections:
+ * - Table: `accounts`
+ * - Table: `transactions`
+ * - Table: `category_aliases`
+ * - Table: `verdicts`
+ * - Table: `users`
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { getFirebaseAdmin, isFirestoreConfigured } from "./firebaseAdmin.js";
+import { getFirebaseAdmin } from "./firebaseAdmin.js";
 import { categorize } from "./categorizer.js";
 import type { LedgerTxn, TxnFlags } from "./types.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, "../../.data");
-const LOCAL_STORAGE_FILE = path.join(DATA_DIR, "local_repository.json");
 
 export type AccountRow = {
   id: string;
@@ -59,108 +53,24 @@ let txnsCache: Map<string, LedgerTxn> = new Map();
 let aliasesCache: Map<string, CategoryAliasRow> = new Map();
 let verdictsCache: VerdictRecord[] = [];
 let initialized = false;
-let firestoreSyncActive = false;
 let nextTxnId = 1;
-let saveDebounceTimer: NodeJS.Timeout | null = null;
-
-// ---------------------------------------------------------------------------
-// Local Persistence Helpers
-// ---------------------------------------------------------------------------
-
-function loadLocalData(): boolean {
-  try {
-    if (!fs.existsSync(LOCAL_STORAGE_FILE)) return false;
-    const raw = fs.readFileSync(LOCAL_STORAGE_FILE, "utf8");
-    if (!raw.trim()) return false;
-    const data = JSON.parse(raw);
-
-    if (Array.isArray(data.accounts)) {
-      accountsCache.clear();
-      data.accounts.forEach((acc: AccountRow) => accountsCache.set(acc.id, acc));
-    }
-    if (Array.isArray(data.transactions)) {
-      txnsCache.clear();
-      data.transactions.forEach((t: LedgerTxn) => {
-        txnsCache.set(t.txn_hash, t);
-        if (t.id && t.id >= nextTxnId) nextTxnId = t.id + 1;
-      });
-    }
-    if (Array.isArray(data.aliases)) {
-      aliasesCache.clear();
-      data.aliases.forEach((a: CategoryAliasRow) => aliasesCache.set(a.pattern, a));
-    }
-    if (Array.isArray(data.verdicts)) {
-      verdictsCache = data.verdicts;
-    }
-    if (typeof data.nextTxnId === "number" && data.nextTxnId > nextTxnId) {
-      nextTxnId = data.nextTxnId;
-    }
-    return true;
-  } catch (err) {
-    console.warn("[Repository] Error reading local storage file:", err instanceof Error ? err.message : err);
-    return false;
-  }
-}
-
-function persistLocalDataNow(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    const snapshot = {
-      accounts: Array.from(accountsCache.values()),
-      transactions: Array.from(txnsCache.values()),
-      aliases: Array.from(aliasesCache.values()),
-      verdicts: verdictsCache,
-      nextTxnId,
-      updated_at: new Date().toISOString(),
-    };
-    fs.writeFileSync(LOCAL_STORAGE_FILE, JSON.stringify(snapshot, null, 2), "utf8");
-  } catch (err) {
-    console.warn("[Repository] Error persisting local storage:", err instanceof Error ? err.message : err);
-  }
-}
-
-function scheduleSaveLocalData(): void {
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    persistLocalDataNow();
-  }, 120);
-}
-
-// ---------------------------------------------------------------------------
-// Initialization
-// ---------------------------------------------------------------------------
 
 export async function initRepository(): Promise<void> {
   if (initialized) return;
 
-  // 1. Always load local cache first so data is instantly available
-  const hasLocal = loadLocalData();
-
-  // 2. If Firestore credentials are not configured, use local storage mode gracefully
-  if (!isFirestoreConfigured()) {
+  const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (!saPath) {
     initialized = true;
-    firestoreSyncActive = false;
-    const accCount = accountsCache.size;
-    const txnCount = txnsCache.size;
-    console.log(
-      `ℹ️  [Storage] Local storage active (${txnCount} txns, ${accCount} accounts from .data/local_repository.json).`
-    );
     return;
   }
 
-  // 3. If credentials exist, sync with Firestore
   try {
-    const admin = getFirebaseAdmin();
-    if (!admin) {
+    const { db } = getFirebaseAdmin();
+    if (!db) {
       initialized = true;
-      firestoreSyncActive = false;
       return;
     }
-
-    const { db } = admin;
-
+    
     const accSnap = await db.collection("accounts").get();
     accSnap.forEach((doc) => {
       accountsCache.set(doc.id, doc.data() as AccountRow);
@@ -183,25 +93,11 @@ export async function initRepository(): Promise<void> {
       verdictsCache.push({ id: doc.id, ...(doc.data() as VerdictRecord) });
     });
 
-    firestoreSyncActive = true;
     initialized = true;
-    scheduleSaveLocalData();
-    console.log(`✅ [Storage] Firestore connected. Synced ${txnsCache.size} transaction(s).`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`⚠️  [Storage] Firestore unavailable (${msg}). Fallback to local storage active.`);
-    firestoreSyncActive = false;
+  } catch {
     initialized = true;
   }
 }
-
-export function isFirestoreSyncActive(): boolean {
-  return firestoreSyncActive;
-}
-
-// ---------------------------------------------------------------------------
-// Account Operations
-// ---------------------------------------------------------------------------
 
 export function upsertAccount(input: {
   id: string;
@@ -217,16 +113,11 @@ export function upsertAccount(input: {
     created_at: new Date().toISOString(),
   };
   accountsCache.set(input.id, row);
-  scheduleSaveLocalData();
 
-  if (firestoreSyncActive) {
-    try {
-      const admin = getFirebaseAdmin();
-      if (admin) {
-        admin.db.collection("accounts").doc(input.id).set(row, { merge: true }).catch(() => {});
-      }
-    } catch {}
-  }
+  try {
+    const { db } = getFirebaseAdmin(); if (!db) return;
+    db.collection("accounts").doc(input.id).set(row, { merge: true }).catch(() => {});
+  } catch {}
 }
 
 export function listAccounts(): AccountRow[] {
@@ -252,10 +143,6 @@ export function bankLabelFor(accountId: string): string {
   return acc?.label ?? accountId;
 }
 
-// ---------------------------------------------------------------------------
-// Transaction Operations
-// ---------------------------------------------------------------------------
-
 export function insertTransactions(txns: LedgerTxn[]): {
   inserted: number;
   skippedIdentical: number;
@@ -277,21 +164,15 @@ export function insertTransactions(txns: LedgerTxn[]): {
     inserted++;
   }
 
-  if (inserted > 0) {
-    scheduleSaveLocalData();
-  }
-
-  if (firestoreSyncActive && toSave.length > 0) {
+  if (toSave.length > 0) {
     try {
-      const admin = getFirebaseAdmin();
-      if (admin) {
-        const batch = admin.db.batch();
-        toSave.slice(0, 400).forEach((t) => {
-          const ref = admin.db.collection("transactions").doc(t.txn_hash);
-          batch.set(ref, t);
-        });
-        batch.commit().catch(() => {});
-      }
+      const { db } = getFirebaseAdmin(); if (!db) return;
+      const batch = db.batch();
+      toSave.slice(0, 400).forEach((t) => {
+        const ref = db.collection("transactions").doc(t.txn_hash);
+        batch.set(ref, t);
+      });
+      batch.commit().catch(() => {});
     } catch {}
   }
 
@@ -306,15 +187,10 @@ export function updateTxnFlags(id: number, flags: TxnFlags): void {
   for (const t of txnsCache.values()) {
     if (t.id === id) {
       t.flags = { ...t.flags, ...flags };
-      scheduleSaveLocalData();
-      if (firestoreSyncActive) {
-        try {
-          const admin = getFirebaseAdmin();
-          if (admin) {
-            admin.db.collection("transactions").doc(t.txn_hash).update({ flags: t.flags }).catch(() => {});
-          }
-        } catch {}
-      }
+      try {
+        const { db } = getFirebaseAdmin(); if (!db) return;
+        db.collection("transactions").doc(t.txn_hash).update({ flags: t.flags }).catch(() => {});
+      } catch {}
       break;
     }
   }
@@ -324,15 +200,10 @@ export function updateTxnCategory(id: number, category: string): void {
   for (const t of txnsCache.values()) {
     if (t.id === id) {
       t.category = category;
-      scheduleSaveLocalData();
-      if (firestoreSyncActive) {
-        try {
-          const admin = getFirebaseAdmin();
-          if (admin) {
-            admin.db.collection("transactions").doc(t.txn_hash).update({ category }).catch(() => {});
-          }
-        } catch {}
-      }
+      try {
+        const { db } = getFirebaseAdmin(); if (!db) return;
+        db.collection("transactions").doc(t.txn_hash).update({ category }).catch(() => {});
+      } catch {}
       break;
     }
   }
@@ -342,18 +213,27 @@ export function updateTxnType(id: number, type: LedgerTxn["type"]): void {
   for (const t of txnsCache.values()) {
     if (t.id === id) {
       t.type = type;
-      scheduleSaveLocalData();
-      if (firestoreSyncActive) {
-        try {
-          const admin = getFirebaseAdmin();
-          if (admin) {
-            admin.db.collection("transactions").doc(t.txn_hash).update({ type }).catch(() => {});
-          }
-        } catch {}
-      }
+      try {
+        const { db } = getFirebaseAdmin(); if (!db) return;
+        db.collection("transactions").doc(t.txn_hash).update({ type }).catch(() => {});
+      } catch {}
       break;
     }
   }
+}
+
+export function deleteTxn(id: number | string): boolean {
+  for (const [hash, t] of txnsCache.entries()) {
+    if (String(t.id) === String(id) || t.txn_hash === String(id)) {
+      txnsCache.delete(hash);
+      try {
+        const { db } = getFirebaseAdmin(); if (!db) return;
+        db.collection("transactions").doc(t.txn_hash).delete().catch(() => {});
+      } catch {}
+      return true;
+    }
+  }
+  return false;
 }
 
 export function persistHygiene(txns: LedgerTxn[]): void {
@@ -362,7 +242,6 @@ export function persistHygiene(txns: LedgerTxn[]): void {
       txnsCache.set(t.txn_hash, t);
     }
   }
-  scheduleSaveLocalData();
 }
 
 export function categorizeAll(): void {
@@ -380,12 +259,7 @@ export function categorizeAll(): void {
       t.category = match.category;
     }
   }
-  scheduleSaveLocalData();
 }
-
-// ---------------------------------------------------------------------------
-// Category Aliases Operations
-// ---------------------------------------------------------------------------
 
 export function userAliases(): UserAlias[] {
   return Array.from(aliasesCache.values())
@@ -412,16 +286,11 @@ export function learnAlias(pattern: string, category: string): { learned: boolea
     created_at: new Date().toISOString(),
   };
   aliasesCache.set(norm, row);
-  scheduleSaveLocalData();
 
-  if (firestoreSyncActive) {
-    try {
-      const admin = getFirebaseAdmin();
-      if (admin) {
-        admin.db.collection("category_aliases").doc(norm).set(row).catch(() => {});
-      }
-    } catch {}
-  }
+  try {
+    const { db } = getFirebaseAdmin(); if (!db) return;
+    db.collection("category_aliases").doc(norm).set(row).catch(() => {});
+  } catch {}
 
   return { learned: true };
 }
@@ -440,17 +309,12 @@ export function applyCorrection(input: {
       t.category = input.category;
       updatedRows++;
       if (!learnedPattern) {
-        const narr = t.clean_narration || t.raw_narration || "";
-        learnedPattern = narr ? narr.slice(0, 30).trim() : input.pattern || null;
+        learnedPattern = t.description ? t.description.slice(0, 30).trim() : input.pattern || null;
         if (learnedPattern) {
           learnAlias(learnedPattern, input.category);
         }
       }
     }
-  }
-
-  if (updatedRows > 0) {
-    scheduleSaveLocalData();
   }
 
   return { ok: true, updatedRows, learnedPattern };
@@ -470,20 +334,11 @@ export function undoCorrection(input: {
   }
   if (input.pattern) {
     aliasesCache.delete(input.pattern);
-    if (firestoreSyncActive) {
-      try {
-        const admin = getFirebaseAdmin();
-        if (admin) {
-          admin.db.collection("category_aliases").doc(input.pattern).delete().catch(() => {});
-        }
-      } catch {}
-    }
+    try {
+      const { db } = getFirebaseAdmin(); if (!db) return;
+      db.collection("category_aliases").doc(input.pattern).delete().catch(() => {});
+    } catch {}
   }
-
-  if (reverted > 0 || input.pattern) {
-    scheduleSaveLocalData();
-  }
-
   return { ok: true, reverted };
 }
 
@@ -492,28 +347,15 @@ export function markTxnDecision(txnId: number, decision: "real" | "duplicate") {
     if (t.id === txnId) {
       if (decision === "real") {
         t.flags.mad_anomaly = false;
-        t.flags.user_kept = true;
+        t.flags.user_marked_real = true;
       } else {
         t.flags.user_duplicate = true;
-      }
-      scheduleSaveLocalData();
-      if (firestoreSyncActive) {
-        try {
-          const admin = getFirebaseAdmin();
-          if (admin) {
-            admin.db.collection("transactions").doc(t.txn_hash).update({ flags: t.flags }).catch(() => {});
-          }
-        } catch {}
       }
       return { ok: true, message: `Transaction marked as ${decision}.` };
     }
   }
   return { ok: false, message: "Transaction not found." };
 }
-
-// ---------------------------------------------------------------------------
-// Verdicts Operations
-// ---------------------------------------------------------------------------
 
 export function saveVerdict(input: {
   query_text: string;
@@ -546,16 +388,11 @@ export function saveVerdict(input: {
   };
 
   verdictsCache.unshift(record);
-  scheduleSaveLocalData();
 
-  if (firestoreSyncActive) {
-    try {
-      const admin = getFirebaseAdmin();
-      if (admin) {
-        admin.db.collection("verdicts").doc(String(id)).set(record).catch(() => {});
-      }
-    } catch {}
-  }
+  try {
+    const { db } = getFirebaseAdmin(); if (!db) return;
+    db.collection("verdicts").doc(String(id)).set(record).catch(() => {});
+  } catch {}
 
   return id;
 }
@@ -567,10 +404,6 @@ export function listVerdicts(limit = 20): VerdictRecord[] {
 export function getVerdict(id: number): VerdictRecord | null {
   return verdictsCache.find((v) => Number(v.id) === id) || null;
 }
-
-// ---------------------------------------------------------------------------
-// Aggregation & State Helpers
-// ---------------------------------------------------------------------------
 
 export function ledgerStats() {
   const txns = Array.from(txnsCache.values());
@@ -607,20 +440,14 @@ export function wipeAll(): { wiped: true; deleted: Record<string, number> } {
   aliasesCache.clear();
   verdictsCache = [];
 
-  persistLocalDataNow();
-
-  if (firestoreSyncActive) {
-    try {
-      const admin = getFirebaseAdmin();
-      if (admin) {
-        ["accounts", "transactions", "category_aliases", "verdicts"].forEach((col) => {
-          admin.db.collection(col).listDocuments().then((docs) => {
-            docs.forEach((d) => d.delete().catch(() => {}));
-          }).catch(() => {});
-        });
-      }
-    } catch {}
-  }
+  try {
+    const { db } = getFirebaseAdmin(); if (!db) return;
+    ["accounts", "transactions", "category_aliases", "verdicts"].forEach((col) => {
+      db.collection(col).listDocuments().then((docs) => {
+        docs.forEach((d) => d.delete());
+      }).catch(() => {});
+    });
+  } catch {}
 
   return { wiped: true, deleted: counts };
 }

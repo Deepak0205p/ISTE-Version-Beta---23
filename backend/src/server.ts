@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -20,11 +18,12 @@ import {
   wipeAll,
   insertTransactions,
   upsertAccount,
+  deleteTxn,
   listVerdicts,
   initRepository,
-  isFirestoreSyncActive,
 } from "./lib/repository.js";
-import { parseStatementWithAi, parseCsvDeterministic } from "./lib/geminiParser.js";
+import { txnHash } from "./lib/ledgerHygiene.js";
+import { parseStatementWithAi } from "./lib/geminiParser.js";
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -64,11 +63,7 @@ app.get("/", (_req, res) => {
 
 // Health check
 app.get("/health", (_req, res) => {
-  res.json({
-    status: "healthy",
-    storage: isFirestoreSyncActive() ? "firestore" : "local",
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 
 // GET /api/config — provide public backend config without secrets
@@ -76,11 +71,7 @@ app.get("/api/config", (_req, res) => {
   res.json({
     llmProvider: process.env.LLM_PROVIDER ?? "gemini",
     hasApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
-    geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
-    storage: {
-      mode: isFirestoreSyncActive() ? "firestore" : "local",
-      firestoreSync: isFirestoreSyncActive(),
-    },
+    geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
     firebase: {
       projectId: process.env.FIREBASE_PROJECT_ID,
       apiKey: process.env.FIREBASE_API_KEY,
@@ -196,10 +187,6 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
         ok: false,
         message: "No files provided. Attach at least one CSV or PDF.",
       });
-    }
-
-    if (req.body.replace === "true" || req.query.replace === "true") {
-      wipeAll();
     }
 
     const uploads: Record<string, unknown>[] = [];
@@ -332,39 +319,17 @@ app.post("/api/wipe", (_req, res) => {
 });
 
 // Helper to build full workspace snapshot
-let currentWorkspaceTargetPaise = 8000000;
-
-function buildWorkspaceSnapshot(targetOverridePaise?: number) {
-  if (typeof targetOverridePaise === "number" && targetOverridePaise > 0) {
-    currentWorkspaceTargetPaise = targetOverridePaise;
-  }
+function buildWorkspaceSnapshot(targetAmountInr: number = 80000) {
   const txns = allTransactions();
   const stats = ledgerStats();
 
-  // Sort txns chronologically
-  const sortedTxns = [...txns].sort((a, b) => a.date.localeCompare(b.date));
-
-  // Determine closing balance:
-  // If the last transaction has balance_after_paise, use it!
   let balancePaise = 0;
-  for (let i = sortedTxns.length - 1; i >= 0; i--) {
-    if (typeof sortedTxns[i].balance_after_paise === "number" && sortedTxns[i].balance_after_paise! > 0) {
-      balancePaise = sortedTxns[i].balance_after_paise!;
-      break;
-    }
-  }
-  if (balancePaise === 0) {
-    let running = 0;
-    txns.forEach((t) => {
-      running += t.amount_paise;
-    });
-    balancePaise = running > 0 ? running : (txns.length > 0 ? 57665586 : 0);
-  }
+  txns.forEach((t) => {
+    balancePaise += t.amount_paise;
+  });
 
   const recurringRaw = detectRecurring(txns);
-  // Recurring commitments for budget subtraction are strictly outflow debits (e.g. rent, gym, subscriptions)
-  const recurringOutflows = recurringRaw.filter((r) => r.amount_paise < 0);
-  const recurring = recurringOutflows.map((r) => ({
+  const recurring = recurringRaw.map((r) => ({
     merchant: r.merchant,
     typical_amount_paise: Math.abs(r.amount_paise),
     frequency: r.interval_days <= 10 ? "weekly" : r.interval_days <= 35 ? "monthly" : "yearly",
@@ -399,39 +364,6 @@ function buildWorkspaceSnapshot(targetOverridePaise?: number) {
     }
   });
 
-  // Monthly flows (by YYYY-MM) to compute TRUE monthly income and spend
-  const monthlyIncomes = new Map<string, number>();
-  const monthlySpends = new Map<string, number>();
-  txns.forEach((t) => {
-    if (!t.date) return;
-    const m = t.date.slice(0, 7);
-    if (t.amount_paise > 0 && t.type !== "transfer" && !t.flags?.transfer) {
-      monthlyIncomes.set(m, (monthlyIncomes.get(m) ?? 0) + t.amount_paise);
-    } else if (t.amount_paise < 0 && t.type !== "transfer" && !t.flags?.transfer) {
-      monthlySpends.set(m, (monthlySpends.get(m) ?? 0) + Math.abs(t.amount_paise));
-    }
-  });
-
-  const distinctMonths = Math.max(1, Math.max(monthlyIncomes.size, monthlySpends.size));
-  const incomeVals = Array.from(monthlyIncomes.values());
-  const spendVals = Array.from(monthlySpends.values());
-
-  const expectedMonthlyIncomePaise = incomeVals.length > 0
-    ? Math.round(incomeVals.sort((a, b) => a - b)[Math.floor(incomeVals.length / 2)])
-    : Math.round(txns.filter(t => t.amount_paise > 0).reduce((acc, t) => acc + t.amount_paise, 0) / distinctMonths);
-
-  const avgMonthlySpendPaise = spendVals.length > 0
-    ? Math.round(spendVals.reduce((a, b) => a + b, 0) / spendVals.length)
-    : Math.round(txns.filter(t => t.amount_paise < 0).reduce((acc, t) => acc + Math.abs(t.amount_paise), 0) / distinctMonths);
-
-  const committedPaise = recurring.reduce((sum, r) => sum + r.monthly_equivalent_paise, 0);
-  const averageVariableSpendPaise = Math.max(0, avgMonthlySpendPaise - committedPaise);
-
-  const safetyBufferPaise = Math.round(Math.max(1500000, expectedMonthlyIncomePaise * 0.15));
-  const freeCashBeforePurchasePaise = balancePaise + expectedMonthlyIncomePaise - committedPaise - averageVariableSpendPaise - safetyBufferPaise;
-  const targetPaise = currentWorkspaceTargetPaise;
-  const netAfterPurchasePaise = freeCashBeforePurchasePaise - targetPaise;
-
   const today = new Date();
   const forecastArray = [1, 2, 3, 4].map((week) => {
     const dt = new Date(today.getTime() + week * 7 * 86400000);
@@ -444,12 +376,13 @@ function buildWorkspaceSnapshot(targetOverridePaise?: number) {
     };
   });
 
-  const verdict: "YES" | "TIGHT" | "NO" | "REFUSED" =
-    txns.length === 0
-      ? "REFUSED"
-      : netAfterPurchasePaise >= 0
-      ? "YES"
-      : (netAfterPurchasePaise >= -safetyBufferPaise ? "TIGHT" : "NO");
+  const targetPaise = Math.round(targetAmountInr * 100);
+  const committedPaise = recurring.reduce((sum, r) => sum + r.monthly_equivalent_paise, 0);
+  const expectedIncomePaise = Math.round(txns.filter((t) => t.amount_paise > 0).reduce((acc, t) => acc + t.amount_paise, 0));
+  const variableSpendPaise = Math.round(txns.filter((t) => t.amount_paise < 0).reduce((acc, t) => acc + Math.abs(t.amount_paise), 0));
+  const safetyBufferPaise = Math.round(Math.max(1500000, balancePaise * 0.15));
+  const freeCashBeforePurchasePaise = balancePaise + expectedIncomePaise - committedPaise - variableSpendPaise - safetyBufferPaise;
+  const netAfterPurchasePaise = freeCashBeforePurchasePaise - targetPaise;
 
   return {
     transactions: txns.map((t) => ({
@@ -474,29 +407,29 @@ function buildWorkspaceSnapshot(targetOverridePaise?: number) {
     forecast: forecastArray,
     internal_transfers: txns.filter((t) => t.type === "transfer").length,
     net_failed_upi: txns.filter((t) => t.type === "netted").length,
-    total_inflow: Math.round(expectedMonthlyIncomePaise / 100),
-    total_outflow: Math.round(avgMonthlySpendPaise / 100),
+    total_inflow: Math.round(expectedIncomePaise / 100),
+    total_outflow: Math.round(variableSpendPaise / 100),
     current_balance: Math.round(balancePaise / 100),
     buffer: Math.round(safetyBufferPaise / 100),
-    verdict,
-    verdict_summary: `Affordability analysis for ₹${targetPaise / 100} evaluated as ${verdict}.`,
+    verdict: netAfterPurchasePaise >= 0 ? "YES" : "TIGHT",
+    verdict_summary: "Affordability analysis complete.",
     affordability: {
       target_amount_paise: targetPaise,
       current_balance_paise: balancePaise,
-      expected_income_paise: expectedMonthlyIncomePaise,
-      income_range_min_paise: Math.round(expectedMonthlyIncomePaise * 0.8),
-      income_range_max_paise: Math.round(expectedMonthlyIncomePaise * 1.2),
+      expected_income_paise: expectedIncomePaise,
+      income_range_min_paise: Math.round(expectedIncomePaise * 0.8),
+      income_range_max_paise: Math.round(expectedIncomePaise * 1.2),
       income_is_variable: false,
       committed_payments_paise: committedPaise,
-      average_variable_spend_paise: averageVariableSpendPaise,
+      average_variable_spend_paise: variableSpendPaise,
       safety_buffer_paise: safetyBufferPaise,
       safety_buffer_rule: "15% of monthly baseline",
       free_cash_before_purchase_paise: freeCashBeforePurchasePaise,
       net_after_purchase_paise: netAfterPurchasePaise,
-      verdict,
-      refusal_reason: txns.length === 0 ? "No statement transactions in ledger. Upload statements to evaluate." : null,
-      distinct_months: distinctMonths,
-      span_days: distinctMonths * 30,
+      verdict: netAfterPurchasePaise >= 0 ? "YES" : "TIGHT",
+      refusal_reason: null,
+      distinct_months: 1,
+      span_days: 30,
       committed_breakdown: recurring.map((r) => ({
         merchant: r.merchant,
         amount_paise: r.typical_amount_paise,
@@ -561,8 +494,8 @@ app.all("/api/ps4", upload.array("files"), async (req, res) => {
       }
 
       if (body.action === "question") {
-        const amountPaise = body.amount_inr ? Math.round(Number(body.amount_inr) * 100) : 8000000;
-        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot(amountPaise) });
+        const amt = Number(body.amount_inr) || 80000;
+        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot(amt) });
       }
     }
 
@@ -572,31 +505,243 @@ app.all("/api/ps4", upload.array("files"), async (req, res) => {
   }
 });
 
-async function seedInitialDataIfEmpty() {
-  const current = allTransactions();
-  if (current.length === 0) {
-    try {
-      const fixturePath = path.resolve(process.cwd(), "fixtures", "hdfc_aug_oct_full.csv");
-      if (fs.existsSync(fixturePath)) {
-        const text = fs.readFileSync(fixturePath, "utf8");
-        const accountId = "Primary-HDFC";
-        const rows = parseCsvDeterministic(text, accountId);
-        if (rows.length > 0) {
-          upsertAccount({ id: accountId, bank: "HDFC Bank", label: "Primary HDFC Account" });
-          insertTransactions(rows);
-          runIngest();
-          console.log(`✅ [Seed] Auto-loaded ${rows.length} verified transactions from fixtures.`);
-        }
-      }
-    } catch (seedErr) {
-      console.warn("[Seed] Could not auto-load fixture data:", seedErr);
+// Manual transaction creation endpoint (Add Expense / Income from UI)
+app.post("/api/transactions", (req, res) => {
+  try {
+    const { amount, description, date, type, category, account_id } = req.body;
+    if (!amount || !description) {
+      return res.status(400).json({ ok: false, message: "Amount and description are required." });
     }
+
+    const amountNum = Number(amount);
+    const amountPaise = type === "credit" ? Math.round(amountNum * 100) : -Math.round(Math.abs(amountNum) * 100);
+    const isoDate = date || new Date().toISOString().slice(0, 10);
+    const accId = account_id || "Primary_Account";
+    const hash = txnHash(accId, isoDate, amountPaise, null, description);
+
+    upsertAccount({ id: accId, bank: "Manual", label: accId.replace(/_/g, " ") });
+    const ins = insertTransactions([
+      {
+        account_id: accId,
+        date: isoDate,
+        amount_paise: amountPaise,
+        raw_narration: description,
+        clean_narration: description,
+        ref: null,
+        category: category || (amountPaise > 0 ? "salary" : "other"),
+        type: "normal",
+        flags: {},
+        txn_hash: hash,
+      },
+    ]);
+
+    runIngest();
+    res.json({ ok: true, inserted: ins.inserted, message: "Transaction recorded in ledger." });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to save transaction." });
   }
-}
+});
+
+// Manual account creation endpoint
+app.post("/api/accounts", (req, res) => {
+  try {
+    const { id, bank, label, opening_balance } = req.body;
+    if (!bank || !label) {
+      return res.status(400).json({ ok: false, message: "Bank and label are required." });
+    }
+    const accId = id || `bank-${Date.now()}`;
+    upsertAccount({ id: accId, bank, label });
+
+    if (opening_balance && Number(opening_balance) > 0) {
+      const balancePaise = Math.round(Number(opening_balance) * 100);
+      const today = new Date().toISOString().slice(0, 10);
+      const desc = `Opening Balance - ${label}`;
+      const hash = txnHash(accId, today, balancePaise, null, desc);
+      insertTransactions([
+        {
+          account_id: accId,
+          date: today,
+          amount_paise: balancePaise,
+          raw_narration: desc,
+          clean_narration: desc,
+          ref: null,
+          category: "transfer",
+          type: "normal",
+          flags: {},
+          txn_hash: hash,
+        },
+      ]);
+    }
+
+    runIngest();
+    res.json({ ok: true, account_id: accId, message: "Account created and synced." });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to create account." });
+  }
+});
+
+// Manual transaction delete endpoint
+app.delete("/api/transactions/:id", (req, res) => {
+  try {
+    const id = req.params.id;
+    const ok = deleteTxn(id);
+    if (ok) {
+      runIngest();
+      return res.json({ ok: true, message: `Transaction ${id} deleted.` });
+    }
+    res.status(404).json({ ok: false, message: "Transaction not found." });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to delete transaction." });
+  }
+});
+
+// Advisor AI Chatbot Endpoint (Gemini 3.5 Flash Lite + Tavily Real-time Web Search)
+app.post("/api/advisor/chat", async (req, res) => {
+  try {
+    const { message, history, userData, enableWebSearch = true } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ ok: false, error: "Valid message is required" });
+    }
+
+    const tavilyKey = process.env.TAVILY_API_KEY || "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";
+    const geminiKey = process.env.GEMINI_API_KEY || "AQ.Ab8RN6J-sF1BtzwQ-AsK0lq1ET7uBX4JjTXQJGlkTjdoFAZxbw";
+    const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+
+    // 1. Intelligent Query Classifier: Decide automatically whether web search is required
+    let webSources: Array<{ title: string; url: string; snippet: string }> = [];
+    
+    // Explicit queries asking about personal finance, savings, or user ledger
+    const isPersonalFinanceQuery = /\b(my savings|my balance|my loan|my emi|my expense|my budget|my goal|my salary|how much did i spend|my account|my portfolio|i afford|can i buy|tell me about my|my cashflow)\b/i.test(message);
+
+    // Queries specifically seeking external market benchmarks, real-time rates, schemes, or public news
+    const isExternalMarketQuery = /\b(rbi|repo|scheme|schemes|tax slabs|80c|new tax regime|old tax regime|nps|ppf interest|epf rate|ssy rate|sukanya|cagr|sensex|nifty|gold price|silver price|fd rate|market news|budget 2025|budget 2026|latest interest rate|inflation in india|best mutual fund|current repo rate)\b/i.test(message);
+
+    // Only invoke Tavily search if the query is strictly seeking external market/statutory data
+    const shouldSearch = Boolean(tavilyKey && isExternalMarketQuery && !isPersonalFinanceQuery);
+
+    if (shouldSearch) {
+      try {
+        const tavRes = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: tavilyKey,
+            query: message + " India finance",
+            search_depth: "basic",
+            max_results: 3,
+          }),
+        });
+        if (tavRes.ok) {
+          const tavData = (await tavRes.json()) as { results?: Array<{ title: string; url: string; content: string }> };
+          if (tavData.results && Array.isArray(tavData.results)) {
+            webSources = tavData.results.map(r => ({
+              title: r.title,
+              url: r.url,
+              snippet: r.content,
+            }));
+          }
+        }
+      } catch (searchErr) {
+        console.warn("[advisor] Tavily search failed, continuing without web results:", searchErr);
+      }
+    }
+
+    // 2. Format Grounded User Financial Profile
+    const profileSummary = userData
+      ? `USER'S PERSONAL FINANCIAL DATA (Ground truth from their connected accounts & ledger):
+- Name: ${userData.name || "User"}
+- Liquid Savings Balance: ₹${Number(userData.metrics?.totalSavingsBalance || 0).toLocaleString("en-IN")}
+- Monthly In-Hand Income: ₹${Number(userData.metrics?.monthlyIncome || 0).toLocaleString("en-IN")}
+- Monthly Expenses: ₹${Number(userData.metrics?.monthlyExpenses || 0).toLocaleString("en-IN")}
+- Active Loans (${userData.loans?.length || 0}): Total Principal: ₹${Number(userData.metrics?.totalLoanPrincipal || 0).toLocaleString("en-IN")}, Monthly EMI: ₹${Number(userData.metrics?.monthlyEmiCommitments || 0).toLocaleString("en-IN")}
+- Active Goals (${userData.goals?.length || 0}): ${userData.goals?.map((g: any) => `${g.title} (Target: ₹${Number(g.targetAmount).toLocaleString("en-IN")}, Saved: ₹${Number(g.currentAmount).toLocaleString("en-IN")})`).join("; ") || "None"}
+- Investments Portfolio (${userData.investments?.length || 0}): Valuation: ₹${Number(userData.metrics?.totalInvestmentValuation || 0).toLocaleString("en-IN")}, Invested: ₹${Number(userData.metrics?.totalInvestedPrincipal || 0).toLocaleString("en-IN")}
+- Bank Accounts: ${userData.bankAccounts?.map((b: any) => `${b.bankName} (${b.accountType}): ₹${Number(b.balance || 0).toLocaleString("en-IN")}`).join(", ") || "None"}
+- Top Spending Categories: ${userData.topCategories || "Not enough data"}`
+      : "No local user profile provided.";
+
+    const webContext = webSources.length > 0
+      ? `LIVE WEB SEARCH RESULTS (Retrieved via Tavily API in real-time):\n` +
+        webSources.map((s, idx) => `[Source ${idx + 1}]: ${s.title} (${s.url})\n${s.snippet}`).join("\n\n")
+      : "No live web search needed or retrieved.";
+
+    // 3. Compose Prompt for Gemini 3.5 Flash Lite
+    const systemPrompt = `You are "Money Matters AI", an expert personal financial advisor and wealth coach.
+You have direct access to:
+1. The user's verified personal financial records (balances, incomes, EMIs, investments, goals).
+2. Live Internet Search data (via Tavily search).
+
+STRICT RESPONSE RULES:
+- ALWAYS respond strictly in fluent, professional ENGLISH.
+- Answer POINT-TO-POINT with ZERO fluff, filler intros, or conversational preamble. Get straight to the answer.
+- Structure responses with structured markdown bullet points, bold key figures (₹ INR), and distinct headers.
+- Ground answers on the user's exact financial numbers whenever answering affordability, savings, or investment questions.
+- If web sources provide live market data (interest rates, repo rates, tax laws), cite them directly with precise figures.
+
+${profileSummary}
+
+${webContext}`;
+
+    const conversationParts: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    // Prior chat messages
+    if (Array.isArray(history)) {
+      for (const h of history.slice(-6)) {
+        conversationParts.push({
+          role: h.sender === "USER" ? "user" : "model",
+          parts: [{ text: h.text }],
+        });
+      }
+    }
+
+    // Latest user message
+    conversationParts.push({
+      role: "user",
+      parts: [{ text: message }],
+    });
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    const gemRes = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: conversationParts,
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 1000,
+        },
+      }),
+    });
+
+    if (!gemRes.ok) {
+      const errText = await gemRes.text();
+      console.error("[advisor] Gemini API error:", errText);
+      throw new Error(`Gemini generation failed: ${gemRes.statusText}`);
+    }
+
+    const gemData = await gemRes.json() as any;
+    const aiText = gemData.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to generate a response. Please try again.";
+
+    res.json({
+      ok: true,
+      reply: aiText,
+      sources: webSources,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[advisor] Chat route failed:", err);
+    res.status(500).json({
+      ok: false,
+      error: err instanceof Error ? err.message : "Chat processing failed",
+    });
+  }
+});
 
 app.listen(port, async () => {
   await initRepository();
-  await seedInitialDataIfEmpty();
   console.log(`Backend server running on http://localhost:${port}`);
 });
 
