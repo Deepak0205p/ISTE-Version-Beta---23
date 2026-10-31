@@ -403,6 +403,22 @@ export function currentBalancePaise(): number {
   return bal;
 }
 
+export function deleteTxn(id: number | string): boolean {
+  for (const [hash, t] of txnsCache.entries()) {
+    if (String(t.id) === String(id) || t.txn_hash === String(id)) {
+      txnsCache.delete(hash);
+      try {
+        const { db } = getFirebaseAdmin();
+        if (db) {
+          db.collection("transactions").doc(t.txn_hash).delete().catch(() => {});
+        }
+      } catch {}
+      return true;
+    }
+  }
+  return false;
+}
+
 export function wipeAll(): { wiped: true; deleted: Record<string, number> } {
   const counts = {
     accounts: accountsCache.size,
