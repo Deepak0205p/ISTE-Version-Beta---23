@@ -143,6 +143,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentUser, setCurrentUser] = useState<UserProfile>(initialFamily.members[0]);
   const [isFamilyView, setIsFamilyView] = useState<boolean>(true);
 
+  // Helper to identify and purge any residual legacy hardcoded mock records
+  const isMockId = (id: string) =>
+    /^(acc_hdfc|acc_icici|acc_axis|acc_sbi|loan_home|loan_car|inv_mf|inv_direct|inv_ppf|goal_emergency|goal_vacation|goal_car|tx_sal|tx_exp|exp_0|exp_1|exp_2|hab_1|hab_2|hab_3|med_1|med_2|stu_1|edu_1|bank-hdfc|loan-home)/i.test(id || '');
+
   // One-time self cleanup: immediately purge legacy hardcoded mock entries from previous sessions
   if (typeof window !== 'undefined') {
     const rawBank = window.localStorage.getItem('mm_bank_accounts') || '';
@@ -151,7 +155,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       rawBank.includes('bank-hdfc-01') ||
       rawLoans.includes('loan-home-01') ||
       rawLoans.includes('4500000') ||
-      window.localStorage.getItem('mm_data_version') !== 'v2_clean';
+      window.localStorage.getItem('mm_data_version') !== 'v2_clean' ||
+      window.localStorage.getItem('mm_ledger_clean_v3') !== 'true';
 
     if (isLegacyMock) {
       [
@@ -167,19 +172,23 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         'mm_transactions',
         'mm_category_overrides',
         'mm_advisor_sessions',
+        'mm_sessions',
       ].forEach((key) => window.localStorage.removeItem(key));
       window.localStorage.setItem('mm_data_version', 'v2_clean');
+      window.localStorage.setItem('mm_ledger_clean_v3', 'true');
     }
   }
 
-  // Collections state
+  // Collections state - starts 100% clean without dummy data when no statement is imported
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     if (!browserStorage) return initialBankAccounts;
     const saved = browserStorage.getItem('mm_bank_accounts');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((b: BankAccount) => b && !isMockId(b.id));
+        }
       } catch {}
     }
     return initialBankAccounts;
@@ -191,7 +200,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((e: ExpenseRecord) => e && !isMockId(e.id));
+        }
       } catch {}
     }
     return initialExpenses;
@@ -200,13 +211,29 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [habitualExpenses, setHabitualExpenses] = useState<HabitualExpense[]>(() => {
     if (!browserStorage) return [];
     const saved = browserStorage.getItem('mm_habitual');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((h: HabitualExpense) => h && !isMockId(h.id));
+        }
+      } catch {}
+    }
+    return [];
   });
 
   const [medicalExpenses, setMedicalExpenses] = useState<MedicalExpenseRecord[]>(() => {
     if (!browserStorage) return [];
     const saved = browserStorage.getItem('mm_medical');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((m: MedicalExpenseRecord) => m && !isMockId(m.id));
+        }
+      } catch {}
+    }
+    return [];
   });
 
   const [students, setStudents] = useState<StudentProfile[]>(() => {
@@ -215,7 +242,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s: StudentProfile) => s && !isMockId(s.id));
+        }
       } catch {}
     }
     return initialStudents;
@@ -227,7 +256,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((ed: EducationExpenseRecord) => ed && !isMockId(ed.id));
+        }
       } catch {}
     }
     return initialEducationExpenses;
@@ -239,7 +270,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((l: LoanRecord) => l && !isMockId(l.id));
+        }
       } catch {}
     }
     return initialLoans;
@@ -251,7 +284,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((inv: InvestmentAsset) => inv && !isMockId(inv.id));
+        }
       } catch {}
     }
     return initialInvestments;
@@ -263,7 +298,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((g: FinancialGoal) => g && !isMockId(g.id));
+        }
       } catch {}
     }
     return initialGoals;
@@ -275,7 +312,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t: TransactionRecord) => t && !isMockId(t.id));
+        }
       } catch {}
     }
     return initialTransactions;

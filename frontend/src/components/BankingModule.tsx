@@ -758,7 +758,7 @@ export const BankingModule: React.FC = () => {
                     </div>
                   </div>
                   <p className="text-[11px] text-[#A79A8A]">
-                    No reversed sorting or missing row gaps detected in sample statement file.
+                    No reversed sorting or missing row gaps detected in imported statement file.
                   </p>
                 </div>
               ) : (
@@ -776,7 +776,16 @@ export const BankingModule: React.FC = () => {
       {/* ======================================================== */}
       {activeTab === 'accounts' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {bankAccounts.map(account => (
+          {bankAccounts.length === 0 ? (
+            <div className="col-span-full p-8 text-center text-xs text-[#A79A8A] bg-[#1D1913] rounded-2xl border border-[#3A3226] space-y-2">
+              <Landmark size={24} className="mx-auto text-[#C9A87E] opacity-60 mb-2" />
+              <p className="font-bold text-white text-sm">No Connected Bank Accounts</p>
+              <p className="text-[#A79A8A] max-w-sm mx-auto">
+                Upload a bank statement in the Parser tab or click &quot;+ Add Account&quot; to link your ledger.
+              </p>
+            </div>
+          ) : (
+            bankAccounts.map(account => (
             <div
               key={account.id}
               className="bg-[#1D1913] border border-[#3A3226] p-5 rounded-2xl relative overflow-hidden space-y-4"
@@ -812,7 +821,7 @@ export const BankingModule: React.FC = () => {
                 </span>
               </div>
             </div>
-          ))}
+          )))}
         </div>
       )}
 

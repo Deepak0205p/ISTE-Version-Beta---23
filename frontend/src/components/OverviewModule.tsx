@@ -20,6 +20,7 @@ import {
   Minimize2,
   X,
   PieChart as PieIcon,
+  BarChart3,
   Info
 } from 'lucide-react';
 import {
@@ -134,12 +135,17 @@ export const OverviewModule: React.FC = () => {
       ];
     }
 
+    // When no statement is added, return empty array without dummy bars
+    if (metrics.monthlyIncome === 0 && metrics.monthlyExpenses === 0) {
+      return [];
+    }
+
     return weeks;
   }, [transactions, expenses, metrics.monthlyIncome, metrics.monthlyExpenses]);
 
   // 6-Month Trajectory
   const multiMonthTrend = useMemo(() => {
-    if (monthlyFlows.size >= 3) {
+    if (monthlyFlows.size > 0) {
       return Array.from(monthlyFlows.entries())
         .sort(([a], [b]) => a.localeCompare(b))
         .slice(-6)
@@ -160,17 +166,9 @@ export const OverviewModule: React.FC = () => {
         });
     }
 
-    const baseInc = metrics.monthlyIncome || 230000;
-    const baseExp = metrics.monthlyExpenses || 78357;
-    return [
-      { month: 'May', income: Math.round(baseInc * 0.92), expenses: Math.round(baseExp * 0.94) },
-      { month: 'Jun', income: Math.round(baseInc * 0.94), expenses: Math.round(baseExp * 0.95) },
-      { month: 'Jul', income: Math.round(baseInc * 0.96), expenses: Math.round(baseExp * 0.97) },
-      { month: 'Aug', income: Math.round(baseInc * 0.98), expenses: Math.round(baseExp * 0.96) },
-      { month: 'Sep', income: Math.round(baseInc * 0.99), expenses: Math.round(baseExp * 0.98) },
-      { month: 'Oct', income: baseInc, expenses: baseExp },
-    ];
-  }, [monthlyFlows, metrics.monthlyIncome, metrics.monthlyExpenses]);
+    // When no statement is added, return empty array without dummy numbers
+    return [];
+  }, [monthlyFlows]);
 
   const activeTrendData = trendView === 'weekly' ? weeklyCadence : multiMonthTrend;
 
@@ -364,8 +362,13 @@ export const OverviewModule: React.FC = () => {
               <Calendar size={12} className="text-[#8F7D65]" />
               Active Period: {activePeriodLabel}
             </span>
-            <span className="text-[11px] font-bold tracking-wide uppercase px-2.5 py-0.5 rounded-full bg-[#E7F5EF] dark:bg-[#16A579]/10 text-[#16A579] border border-[#16A579]/30 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#16A579] animate-pulse" /> Live Reconciled
+            <span className={`text-[11px] font-bold tracking-wide uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+              transactions.length > 0
+                ? 'bg-[#E7F5EF] dark:bg-[#16A579]/10 text-[#16A579] border border-[#16A579]/30'
+                : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${transactions.length > 0 ? 'bg-[#16A579] animate-pulse' : 'bg-stone-400'}`} />
+              {transactions.length > 0 ? 'Live Reconciled' : 'Awaiting Statement'}
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#29241E] dark:text-white font-tabular">
@@ -421,8 +424,14 @@ export const OverviewModule: React.FC = () => {
             <span className="text-[#6F665C] dark:text-[#A79A8A]">
               Assets: <strong className="text-[#29241E] dark:text-white font-tabular">{formatCompactINR(metrics.totalSavingsBalance + metrics.totalInvestmentValuation)}</strong>
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30">
-              Solvent (1.48x)
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              metrics.totalLoanPrincipal === 0
+                ? 'bg-stone-100 text-stone-600 border border-stone-200 dark:bg-stone-800 dark:text-stone-300'
+                : 'bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30'
+            }`}>
+              {metrics.totalLoanPrincipal === 0
+                ? 'Zero Debt'
+                : `${((metrics.totalSavingsBalance + metrics.totalInvestmentValuation) / (metrics.totalLoanPrincipal || 1)).toFixed(2)}x Solvency`}
             </span>
           </div>
         </div>
@@ -444,8 +453,12 @@ export const OverviewModule: React.FC = () => {
             <span className="text-[#6F665C] dark:text-[#A79A8A]">
               {transactions.filter(t => t.type === 'CREDIT' && !t.isInternalTransfer).length} Inflow Credits
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30">
-              100% Reconciled
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              transactions.some(t => t.type === 'CREDIT' && !t.isInternalTransfer)
+                ? 'bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30'
+                : 'bg-stone-100 text-stone-500 border border-stone-200 dark:bg-stone-800 dark:text-stone-400'
+            }`}>
+              {transactions.some(t => t.type === 'CREDIT' && !t.isInternalTransfer) ? '100% Reconciled' : 'Awaiting Inflow'}
             </span>
           </div>
         </div>
@@ -465,10 +478,14 @@ export const OverviewModule: React.FC = () => {
           </div>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#E6E1D8] dark:border-[#3A3226]/50 text-xs">
             <span className="text-[#6F665C] dark:text-[#A79A8A]">
-              Committed: <strong className="text-[#29241E] dark:text-white font-tabular">{formatCompactINR(metrics.monthlyEmiCommitments || 55900)}</strong>
+              Committed: <strong className="text-[#29241E] dark:text-white font-tabular">{formatCompactINR(metrics.monthlyEmiCommitments)}</strong>
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30">
-              {metrics.savingsRatePercentage}% Saved
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              metrics.monthlyIncome > 0
+                ? 'bg-[#E7F5EF] text-[#16A579] border border-[#16A579]/30'
+                : 'bg-stone-100 text-stone-500 border border-stone-200 dark:bg-stone-800 dark:text-stone-400'
+            }`}>
+              {metrics.monthlyIncome > 0 ? `${metrics.savingsRatePercentage}% Saved` : '0% Outflow'}
             </span>
           </div>
         </div>
@@ -488,10 +505,16 @@ export const OverviewModule: React.FC = () => {
           </div>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#E6E1D8] dark:border-[#3A3226]/50 text-xs">
             <span className="text-[#6F665C] dark:text-[#A79A8A]">
-              {bankAccounts.length} Connected Accounts
+              {bankAccounts.length} Connected Account{bankAccounts.length === 1 ? '' : 's'}
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EAF1F7] text-[#4F7CAC] border border-[#4F7CAC]/30">
-              Safe Buffer
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              bankAccounts.length === 0
+                ? 'bg-stone-100 text-stone-500 border border-stone-200 dark:bg-stone-800 dark:text-stone-400'
+                : metrics.totalSavingsBalance >= (metrics.monthlyExpenses * 3) && metrics.totalSavingsBalance > 0
+                ? 'bg-[#EAF1F7] text-[#4F7CAC] border border-[#4F7CAC]/30'
+                : 'bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
+            }`}>
+              {bankAccounts.length === 0 ? 'No Accounts' : metrics.totalSavingsBalance >= (metrics.monthlyExpenses * 3) && metrics.totalSavingsBalance > 0 ? 'Safe Buffer' : 'Building Buffer'}
             </span>
           </div>
         </div>
@@ -543,31 +566,49 @@ export const OverviewModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="h-60 w-full min-w-0">
-              <ResponsiveContainer width="100%" height={240} minWidth={0}>
-                <BarChart data={activeTrendData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#16A579" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#0E7A57" stopOpacity={0.8} />
-                    </linearGradient>
-                    <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#D95C52" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#B83E34" stopOpacity={0.85} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-                  <XAxis dataKey="month" stroke={axisStroke} fontSize={12} tickLine={false} />
-                  <YAxis stroke={axisStroke} fontSize={11} tickFormatter={val => formatCompactINR(val)} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: tooltipBg, borderColor: isDarkMode ? '#3A3226' : '#E6E1D8', borderRadius: '12px', color: tooltipColor, boxShadow: '0 10px 25px -5px rgba(41, 36, 30, 0.08)' }}
-                    formatter={(val: any) => [formatINR(Number(val)), '']}
-                  />
-                  <Bar dataKey="income" name="Inflow" fill="url(#inflowGrad)" radius={[6, 6, 0, 0]} maxBarSize={38} />
-                  <Bar dataKey="expenses" name="Outflow" fill="url(#outflowGrad)" radius={[6, 6, 0, 0]} maxBarSize={38} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {activeTrendData.length === 0 || activeTrendData.every(d => (d.income || 0) === 0 && (d.expenses || 0) === 0) ? (
+              <div className="h-60 w-full flex flex-col items-center justify-center text-center p-6 bg-[#F8F7F4]/60 dark:bg-[#241F17]/30 rounded-xl border border-dashed border-[#E6E1D8] dark:border-[#3A3226]">
+                <div className="w-10 h-10 rounded-xl bg-[#8F7D65]/10 flex items-center justify-center text-[#8F7D65] mb-2">
+                  <BarChart3 size={20} />
+                </div>
+                <p className="text-xs font-bold text-[#29241E] dark:text-white">No Statement Cash Flow Recorded</p>
+                <p className="text-[11px] text-[#6F665C] dark:text-[#A79A8A] max-w-sm mt-0.5">
+                  Upload a bank or credit card statement to generate real-time monthly inflow velocity and living expense burn patterns.
+                </p>
+                <button
+                  onClick={() => setCurrentTab('banking')}
+                  className="mt-3 px-3.5 py-1.5 rounded-lg bg-[#8F7D65] hover:bg-[#786751] text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                >
+                  Import Statement
+                </button>
+              </div>
+            ) : (
+              <div className="h-60 w-full min-w-0">
+                <ResponsiveContainer width="100%" height={240} minWidth={0}>
+                  <BarChart data={activeTrendData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#16A579" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#0E7A57" stopOpacity={0.8} />
+                      </linearGradient>
+                      <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#D95C52" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#B83E34" stopOpacity={0.85} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                    <XAxis dataKey="month" stroke={axisStroke} fontSize={12} tickLine={false} />
+                    <YAxis stroke={axisStroke} fontSize={11} tickFormatter={val => formatCompactINR(val)} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: tooltipBg, borderColor: isDarkMode ? '#3A3226' : '#E6E1D8', borderRadius: '12px', color: tooltipColor, boxShadow: '0 10px 25px -5px rgba(41, 36, 30, 0.08)' }}
+                      formatter={(val: any) => [formatINR(Number(val)), '']}
+                    />
+                    <Bar dataKey="income" name="Inflow" fill="url(#inflowGrad)" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                    <Bar dataKey="expenses" name="Outflow" fill="url(#outflowGrad)" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Cash Flow Summary Intelligence Strip */}
@@ -608,79 +649,99 @@ export const OverviewModule: React.FC = () => {
             </button>
           </div>
 
-          {/* Interactive Clickable Donut Area */}
-          <div
-            onClick={() => setIsChartMaximized(true)}
-            className="h-44 w-full min-w-0 relative flex items-center justify-center cursor-pointer my-1 transition-transform duration-300"
-          >
-            <ResponsiveContainer width="100%" height={176} minWidth={0}>
-              <PieChart>
-                <Pie
-                  data={categoryChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={54}
-                  outerRadius={78}
-                  paddingAngle={4}
-                  dataKey="value"
-                  animationDuration={600}
-                >
-                  {categoryChartData.map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                      className="transition-all duration-300 hover:opacity-85"
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: tooltipBg, borderColor: isDarkMode ? '#3A3226' : '#E6E1D8', borderRadius: '10px', color: tooltipColor }}
-                  formatter={(val: any) => [formatINR(Number(val)), 'Amount']}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute text-center pointer-events-none">
-              <span className="text-[10px] text-[#6F665C] dark:text-[#A79A8A] font-bold uppercase tracking-wider block">Total Spend</span>
-              <span className="text-base font-extrabold text-[#29241E] dark:text-white font-tabular">{formatCompactINR(metrics.monthlyExpenses)}</span>
+          {categoryChartData.length === 0 ? (
+            <div className="h-60 w-full flex flex-col items-center justify-center text-center p-6 bg-[#F8F7F4]/60 dark:bg-[#241F17]/30 rounded-xl border border-dashed border-[#E6E1D8] dark:border-[#3A3226] my-auto">
+              <div className="w-10 h-10 rounded-xl bg-[#8F7D65]/10 flex items-center justify-center text-[#8F7D65] mb-2">
+                <PieIcon size={20} />
+              </div>
+              <p className="text-xs font-bold text-[#29241E] dark:text-white">No Expenses Recorded</p>
+              <p className="text-[11px] text-[#6F665C] dark:text-[#A79A8A] max-w-xs mt-0.5">
+                Imported statements will automatically categorize your living expenses into lifestyle, utilities, food, and essentials.
+              </p>
+              <button
+                onClick={() => setCurrentTab('banking')}
+                className="mt-3 px-3.5 py-1.5 rounded-lg bg-[#8F7D65] hover:bg-[#786751] text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+              >
+                Import Statement
+              </button>
             </div>
-          </div>
-
-          {/* Itemized Categories with Progress Bars */}
-          <div className="overflow-y-auto space-y-2 mt-2 max-h-40 pr-1">
-            {categoryChartData.map((cat, i) => {
-              const totalExp = metrics.monthlyExpenses || 1;
-              const share = Math.min(100, Math.round((cat.value / totalExp) * 100));
-              return (
-                <div
-                  key={cat.name}
-                  onClick={() => {
-                    setActivePieIndex(i);
-                    setIsChartMaximized(true);
-                  }}
-                  className="p-2.5 rounded-xl bg-[#F8F7F4] dark:bg-[#241F17]/70 hover:bg-[#F2ECE3] dark:hover:bg-[#241F17] border border-[#E6E1D8] dark:border-[#3A3226]/50 cursor-pointer transition space-y-1.5"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                      <span className="truncate font-semibold text-[#29241E] dark:text-white">{cat.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white dark:bg-[#1D1913] text-[#6F665C] dark:text-[#A79A8A] border border-[#E6E1D8] dark:border-[#3A3226]">
-                        {share}%
-                      </span>
-                      <span className="font-extrabold text-[#29241E] dark:text-white font-tabular">{formatINR(cat.value)}</span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-[#E8E3D8] dark:bg-[#191510] h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${share}%`, backgroundColor: COLORS[i % COLORS.length] }}
+          ) : (
+            <>
+              {/* Interactive Clickable Donut Area */}
+              <div
+                onClick={() => setIsChartMaximized(true)}
+                className="h-44 w-full min-w-0 relative flex items-center justify-center cursor-pointer my-1 transition-transform duration-300"
+              >
+                <ResponsiveContainer width="100%" height={176} minWidth={0}>
+                  <PieChart>
+                    <Pie
+                      data={categoryChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={54}
+                      outerRadius={78}
+                      paddingAngle={4}
+                      dataKey="value"
+                      animationDuration={600}
+                    >
+                      {categoryChartData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                          className="transition-all duration-300 hover:opacity-85"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: tooltipBg, borderColor: isDarkMode ? '#3A3226' : '#E6E1D8', borderRadius: '10px', color: tooltipColor }}
+                      formatter={(val: any) => [formatINR(Number(val)), 'Amount']}
                     />
-                  </div>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute text-center pointer-events-none">
+                  <span className="text-[10px] text-[#6F665C] dark:text-[#A79A8A] font-bold uppercase tracking-wider block">Total Spend</span>
+                  <span className="text-base font-extrabold text-[#29241E] dark:text-white font-tabular">{formatCompactINR(metrics.monthlyExpenses)}</span>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              {/* Itemized Categories with Progress Bars */}
+              <div className="overflow-y-auto space-y-2 mt-2 max-h-40 pr-1">
+                {categoryChartData.map((cat, i) => {
+                  const totalExp = metrics.monthlyExpenses || 1;
+                  const share = Math.min(100, Math.round((cat.value / totalExp) * 100));
+                  return (
+                    <div
+                      key={cat.name}
+                      onClick={() => {
+                        setActivePieIndex(i);
+                        setIsChartMaximized(true);
+                      }}
+                      className="p-2.5 rounded-xl bg-[#F8F7F4] dark:bg-[#241F17]/70 hover:bg-[#F2ECE3] dark:hover:bg-[#241F17] border border-[#E6E1D8] dark:border-[#3A3226]/50 cursor-pointer transition space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                          <span className="truncate font-semibold text-[#29241E] dark:text-white">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white dark:bg-[#1D1913] text-[#6F665C] dark:text-[#A79A8A] border border-[#E6E1D8] dark:border-[#3A3226]">
+                            {share}%
+                          </span>
+                          <span className="font-extrabold text-[#29241E] dark:text-white font-tabular">{formatINR(cat.value)}</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-[#E8E3D8] dark:bg-[#191510] h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${share}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
