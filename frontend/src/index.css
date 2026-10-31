@@ -1,64 +1,46 @@
 /*
- * Professional Eye-Friendly Analogous Palette (Blue & Purple)
- *
- * 1. Royal Blue (Primary Accent):    #3B82F6
- * 2. Deep Violet / Purple:           #7C3AED
- * 3. Soft Cool Canvas:               #F8FAFC
- * 4. Deep Slate (High contrast text):#0F172A
+ * Legacy-app theme (classic sidebar app) — warm palette:
+ * primary = gray-brown, secondary = light orange, background = very light gray.
+ * Tailwind itself is imported in app/globals.css; this file carries the
+ * custom design tokens the feature modules consume via var(...).
  */
 @layer base {
   :root {
-    --bg-primary: #F8FAFC;      /* Clean soft light canvas */
-    --bg-secondary: #FFFFFF;    /* Pure crisp card surface */
-    --bg-elevated: #F1F5F9;     /* Secondary elevated surface */
-    --border-color: #E2E8F0;    /* Crisp soft border */
-    --text-primary: #0F172A;    /* Deep slate high contrast */
-    --text-secondary: #64748B;  /* Slate secondary text */
-    --text-muted: #94A3B8;      /* Slate muted */
-    --brand-primary: #3B82F6;   /* Royal Blue */
-    --brand-dark: #1D4ED8;      /* Deep Cobalt */
-    --brand-light: #EFF6FF;     /* Blue ice glow */
-    --accent-teal: #3B82F6;     
-    --accent-teal-glow: #3B82F626;
-    --accent-orange: #7C3AED;   /* Purple secondary */
-    --accent-orange-glow: #7C3AED26;
-    --positive: #3B82F6;        
-    --positive-bg: #EFF6FF;
-    --warning: #7C3AED;         
-    --warning-bg: #F5F3FF;
-    --error: #7C3AED;           
-    --error-bg: #F5F3FF;
-    --info: #3B82F6;            
-    --info-bg: #EFF6FF;
-    --unknown: #64748B;         
-    --unknown-bg: #F1F5F9;
+    --bg-primary: #F5F4F2;      /* very light gray */
+    --bg-secondary: #FBFAF7;
+    --bg-elevated: #ECEAE6;
+    --border-color: #E3DFD8;
+    --text-primary: #35291C;    /* deep gray-brown */
+    --text-secondary: #857767;
+    --accent-teal: #8D7A62;     /* primary gray-brown */
+    --accent-teal-glow: #8D7A622E;
+    --accent-orange: #E8A267;   /* secondary light orange */
+    --accent-orange-glow: #E8A26740;
+    --positive: #16A34A;
+    --positive-bg: #E5F4E9;
+    --warning: #D97706;
+    --warning-bg: #FEF3C7;
+    --error: #DC2626;
+    --error-bg: #FEE2E2;
   }
 
   .dark {
-    --bg-primary: #0F172A;      /* Soothing deep slate */
-    --bg-secondary: #1E293B;    /* Elevated slate card */
-    --bg-elevated: #273549;     /* Slate surface */
-    --border-color: #334155;    /* Subtle dark border */
-    --text-primary: #F8FAFC;    /* Soft crisp text */
-    --text-secondary: #94A3B8;  /* Soothing muted text */
-    --text-muted: #64748B;
-    --brand-primary: #3B82F6;   /* Electric Royal Blue */
-    --brand-dark: #1D4ED8;
-    --brand-light: #1E293B;
-    --accent-teal: #3B82F6;
-    --accent-teal-glow: #3B82F633;
-    --accent-orange: #8B5CF6;
-    --accent-orange-glow: #8B5CF633;
-    --positive: #3B82F6;
-    --positive-bg: #3B82F626;
-    --warning: #8B5CF6;
-    --warning-bg: #8B5CF626;
-    --error: #8B5CF6;
-    --error-bg: #8B5CF626;
-    --info: #3B82F6;
-    --info-bg: #3B82F626;
-    --unknown: #64748B;
-    --unknown-bg: #64748B26;
+    --bg-primary: #121008;      /* warm near-black */
+    --bg-secondary: #1D1913;
+    --bg-elevated: #241F17;
+    --border-color: #3A3226;
+    --text-primary: #F5F4F2;
+    --text-secondary: #A79A8A;
+    --accent-teal: #C9A87E;     /* lighter brown for dark surfaces */
+    --accent-teal-glow: #C9A87E33;
+    --accent-orange: #E8A267;
+    --accent-orange-glow: #E8A26740;
+    --positive: #10B981;
+    --positive-bg: #10B98126;
+    --warning: #F59E0B;
+    --warning-bg: #F59E0B26;
+    --error: #F43F5E;
+    --error-bg: #F43F5E26;
   }
 }
 
@@ -77,7 +59,9 @@ body {
 }
 
 /* ========================================================
-   LIGHT MODE OVERRIDES FOR HARDCODED UTILITY CLASSES
+   LIGHT MODE THEME ENGINE
+   Transforms dark utility tokens into a warm, luxurious,
+   high-contrast, editorial fintech light theme.
    ======================================================== */
 
 html:not(.dark),
@@ -87,175 +71,204 @@ html.light,
 }
 
 /* 1. Main Container & Card Backgrounds */
-html:not(.dark) [class*="bg-[#1C1917]"],
-.light [class*="bg-[#1C1917]"],
 html:not(.dark) [class*="bg-[#1D1913]"],
 .light [class*="bg-[#1D1913]"],
 html:not(.dark) [class*="bg-[#161512]"],
 .light [class*="bg-[#161512]"],
-html:not(.dark) [class*="bg-[#1E293B]"],
-.light [class*="bg-[#1E293B]"],
 html:not(.dark) [class*="bg-[#111C2E]"],
 .light [class*="bg-[#111C2E]"] {
-  background-color: #FFFFFF !important;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03) !important;
+  background-color: #FBFAF7 !important;
+  box-shadow: 0 4px 20px -2px rgba(53, 41, 28, 0.08), 0 2px 6px -1px rgba(53, 41, 28, 0.04) !important;
 }
 
 /* 2. Elevated Containers, Inner Panels, Inactive Tabs */
-html:not(.dark) [class*="bg-[#262220]"],
-.light [class*="bg-[#262220]"],
 html:not(.dark) [class*="bg-[#241F17]"],
 .light [class*="bg-[#241F17]"],
 html:not(.dark) [class*="bg-[#1F1C16]"],
 .light [class*="bg-[#1F1C16]"],
-html:not(.dark) [class*="bg-[#273549]"],
-.light [class*="bg-[#273549]"],
 html:not(.dark) [class*="bg-[#172438]"],
 .light [class*="bg-[#172438]"] {
-  background-color: #F1F5F9 !important;
+  background-color: #ECEAE6 !important;
 }
 
 /* 3. Deep Backgrounds */
-html:not(.dark) [class*="bg-[#121212]"],
-.light [class*="bg-[#121212]"],
-html:not(.dark) [class*="bg-[#0F172A]"],
-.light [class*="bg-[#0F172A]"],
 html:not(.dark) [class*="bg-[#191510]"],
 .light [class*="bg-[#191510]"],
-html:not(.dark) [class*="bg-[#14120E]"],
-.light [class*="bg-[#14120E]"],
+html:not(.dark) [class*="bg-[#121008]"],
+.light [class*="bg-[#121008]"],
+html:not(.dark) [class*="bg-[#0F0E0B]"],
+.light [class*="bg-[#0F0E0B]"],
+html:not(.dark) [class*="bg-[#12100B]"],
+.light [class*="bg-[#12100B]"],
+html:not(.dark) [class*="bg-[#221E18]"],
+.light [class*="bg-[#221E18]"],
 html:not(.dark) [class*="bg-[#0B1220]"],
 .light [class*="bg-[#0B1220]"] {
-  background-color: #F8FAFC !important;
+  background-color: #F5F4F2 !important;
 }
 
 /* Semi-transparent variants */
-html:not(.dark) [class*="bg-[#1C1917]/"],
-.light [class*="bg-[#1C1917]/"],
-html:not(.dark) [class*="bg-[#1E293B]/"],
-.light [class*="bg-[#1E293B]/"],
+html:not(.dark) [class*="bg-[#1D1913]/"],
+.light [class*="bg-[#1D1913]/"],
+html:not(.dark) [class*="bg-[#161512]/"],
+.light [class*="bg-[#161512]/"],
 html:not(.dark) [class*="bg-[#111C2E]/"],
 .light [class*="bg-[#111C2E]/"] {
-  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-color: rgba(251, 250, 247, 0.95) !important;
 }
 
-html:not(.dark) [class*="bg-[#262220]/"],
-.light [class*="bg-[#262220]/"],
-html:not(.dark) [class*="bg-[#273549]/"],
-.light [class*="bg-[#273549]/"],
+html:not(.dark) [class*="bg-[#241F17]/"],
+.light [class*="bg-[#241F17]/"],
+html:not(.dark) [class*="bg-[#1F1C16]/"],
+.light [class*="bg-[#1F1C16]/"],
 html:not(.dark) [class*="bg-[#172438]/"],
 .light [class*="bg-[#172438]/"] {
-  background-color: rgba(241, 245, 249, 0.85) !important;
+  background-color: rgba(236, 234, 230, 0.8) !important;
 }
 
-html:not(.dark) [class*="bg-[#121212]/"],
-.light [class*="bg-[#121212]/"],
-html:not(.dark) [class*="bg-[#0F172A]/"],
-.light [class*="bg-[#0F172A]/"],
+html:not(.dark) [class*="bg-[#191510]/"],
+.light [class*="bg-[#191510]/"],
+html:not(.dark) [class*="bg-[#0F0E0B]/"],
+.light [class*="bg-[#0F0E0B]/"],
 html:not(.dark) [class*="bg-[#0B1220]/"],
 .light [class*="bg-[#0B1220]/"] {
-  background-color: rgba(248, 250, 252, 0.85) !important;
+  background-color: rgba(245, 244, 242, 0.85) !important;
 }
 
 /* 4. Chips, dropdowns, slate backgrounds */
-html:not(.dark) [class*="bg-[#38332E]"],
-.light [class*="bg-[#38332E]"],
-html:not(.dark) [class*="bg-[#334155]"],
-.light [class*="bg-[#334155]"] {
-  background-color: #E2E8F0 !important;
+html:not(.dark) [class*="bg-[#2E2820]"],
+.light [class*="bg-[#2E2820]"],
+html:not(.dark) [class*="bg-[#2C261E]"],
+.light [class*="bg-[#2C261E]"],
+html:not(.dark) [class*="bg-[#1E293B]"],
+.light [class*="bg-[#1E293B]"] {
+  background-color: #E3DFD8 !important;
 }
 
 /* 5. Hover states */
-html:not(.dark) [class*="hover:bg-[#262220]"]:hover,
-.light [class*="hover:bg-[#262220]"]:hover,
-html:not(.dark) [class*="hover:bg-[#181513]"]:hover,
-.light [class*="hover:bg-[#181513]"]:hover,
+html:not(.dark) [class*="hover:bg-[#241F17]"]:hover,
+.light [class*="hover:bg-[#241F17]"]:hover,
+html:not(.dark) [class*="hover:bg-[#1B1812]"]:hover,
+.light [class*="hover:bg-[#1B1812]"]:hover,
 html:not(.dark) [class*="hover:bg-[#172438]"]:hover,
-.light [class*="hover:bg-[#172438]"]:hover,
-html:not(.dark) [class*="hover:bg-[#334155]"]:hover,
-.light [class*="hover:bg-[#334155]"]:hover {
-  background-color: #E2E8F0 !important;
+.light [class*="hover:bg-[#172438]"]:hover {
+  background-color: #E3DFD8 !important;
 }
 
-html:not(.dark) [class*="hover:bg-[#121212]"]:hover,
-.light [class*="hover:bg-[#121212]"]:hover,
+html:not(.dark) [class*="hover:bg-[#2E2820]"]:hover,
+.light [class*="hover:bg-[#2E2820]"]:hover,
+html:not(.dark) [class*="hover:bg-[#1E293B]"]:hover,
+.light [class*="hover:bg-[#1E293B]"]:hover {
+  background-color: #D6D0C7 !important;
+}
+
+html:not(.dark) [class*="hover:bg-[#191510]"]:hover,
+.light [class*="hover:bg-[#191510]"]:hover,
+html:not(.dark) [class*="hover:bg-[#221E18]"]:hover,
+.light [class*="hover:bg-[#221E18]"]:hover,
 html:not(.dark) [class*="hover:bg-[#0B1220]"]:hover,
 .light [class*="hover:bg-[#0B1220]"]:hover {
-  background-color: #F1F5F9 !important;
+  background-color: #ECEAE6 !important;
 }
 
 /* 6. Borders & Dividers */
-html:not(.dark) [class*="border-[#38332E]"],
-.light [class*="border-[#38332E]"],
-html:not(.dark) [class*="border-[#38332E]/"],
-.light [class*="border-[#38332E]/"],
-html:not(.dark) [class*="border-[#334155]"],
-.light [class*="border-[#334155]"],
-html:not(.dark) [class*="border-[#334155]/"],
-.light [class*="border-[#334155]/"],
+html:not(.dark) [class*="border-[#3A3226]"],
+.light [class*="border-[#3A3226]"],
+html:not(.dark) [class*="border-[#3A3226]/"],
+.light [class*="border-[#3A3226]/"],
+html:not(.dark) [class*="border-[#2C261E]"],
+.light [class*="border-[#2C261E]"],
+html:not(.dark) [class*="border-[#2C261E]/"],
+.light [class*="border-[#2C261E]/"],
 html:not(.dark) [class*="border-[#26364B]"],
 .light [class*="border-[#26364B]"],
 html:not(.dark) [class*="border-[#26364B]/"],
 .light [class*="border-[#26364B]/"] {
-  border-color: #E2E8F0 !important;
+  border-color: #E3DFD8 !important;
 }
 
-html:not(.dark) [class*="divide-[#38332E]"] > :not([hidden]) ~ :not([hidden]),
-.light [class*="divide-[#38332E]"] > :not([hidden]) ~ :not([hidden]),
-html:not(.dark) [class*="divide-[#334155]"] > :not([hidden]) ~ :not([hidden]),
-.light [class*="divide-[#334155]"] > :not([hidden]) ~ :not([hidden]),
-html:not(.dark) [class*="divide-[#262220]"] > :not([hidden]) ~ :not([hidden]),
-.light [class*="divide-[#262220]"] > :not([hidden]) ~ :not([hidden]),
+html:not(.dark) [class*="divide-[#3A3226]"] > :not([hidden]) ~ :not([hidden]),
+.light [class*="divide-[#3A3226]"] > :not([hidden]) ~ :not([hidden]),
+html:not(.dark) [class*="divide-[#2C261E]"] > :not([hidden]) ~ :not([hidden]),
+.light [class*="divide-[#2C261E]"] > :not([hidden]) ~ :not([hidden]),
+html:not(.dark) [class*="divide-[#241F17]"] > :not([hidden]) ~ :not([hidden]),
+.light [class*="divide-[#241F17]"] > :not([hidden]) ~ :not([hidden]),
 html:not(.dark) [class*="divide-[#26364B]"] > :not([hidden]) ~ :not([hidden]),
 .light [class*="divide-[#26364B]"] > :not([hidden]) ~ :not([hidden]) {
-  border-color: #E2E8F0 !important;
+  border-color: #E3DFD8 !important;
 }
 
-/* 7. Text Colors — Deep Black (#000000) for all light mode text elements */
-html:not(.dark) [class*="text-[#78716C]"],
-.light [class*="text-[#78716C]"],
+/* 7. Text Colors */
+html:not(.dark) [class*="text-[#A79A8A]"],
+.light [class*="text-[#A79A8A]"],
 html:not(.dark) [class*="text-[#94A3B8]"],
-.light [class*="text-[#94A3B8]"],
-html:not(.dark) [class*="text-[#64748B]"],
-.light [class*="text-[#64748B]"],
-html:not(.dark) .text-slate-500,
-.light .text-slate-500,
-html:not(.dark) .text-gray-500,
-.light .text-gray-500,
-html:not(.dark) .text-slate-400,
-.light .text-slate-400,
-html:not(.dark) .text-gray-400,
-.light .text-gray-400,
-html:not(.dark) .text-zinc-400,
-.light .text-zinc-400 {
-  color: #000000 !important;
+.light [class*="text-[#94A3B8]"] {
+  color: #7A6B59 !important;
 }
 
-html:not(.dark) [class*="text-[#FAF8F5]"],
-.light [class*="text-[#FAF8F5]"],
-html:not(.dark) [class*="text-[#F1F5F9]"],
-.light [class*="text-[#F1F5F9]"],
-html:not(.dark) [class*="text-[#E2E8F0]"],
-.light [class*="text-[#E2E8F0]"],
+html:not(.dark) [class*="text-[#CFC4B6]"],
+.light [class*="text-[#CFC4B6]"],
+html:not(.dark) [class*="text-[#D9C0A0]"],
+.light [class*="text-[#D9C0A0]"] {
+  color: #4A3B2C !important;
+}
+
+html:not(.dark) [class*="text-[#E2C799]"],
+.light [class*="text-[#E2C799]"],
+html:not(.dark) [class*="text-[#D4A373]"],
+.light [class*="text-[#D4A373]"] {
+  color: #8C5E32 !important;
+}
+
+html:not(.dark) .text-emerald-400,
+.light .text-emerald-400,
+html:not(.dark) .text-emerald-300,
+.light .text-emerald-300 {
+  color: #047857 !important;
+}
+
+html:not(.dark) .text-amber-300,
+.light .text-amber-300,
+html:not(.dark) .text-amber-400,
+.light .text-amber-400 {
+  color: #B45309 !important;
+}
+
+html:not(.dark) .text-sky-300,
+.light .text-sky-300,
+html:not(.dark) .text-sky-400,
+.light .text-sky-400 {
+  color: #0369A1 !important;
+}
+
+html:not(.dark) .text-red-400,
+.light .text-red-400,
+html:not(.dark) .text-rose-400,
+.light .text-rose-400 {
+  color: #BE123C !important;
+}
+
 html:not(.dark) [class*="text-[#ECEAE6]"],
 .light [class*="text-[#ECEAE6]"],
 html:not(.dark) [class*="text-[#F5F4F2]"],
 .light [class*="text-[#F5F4F2]"],
-html:not(.dark) [class*="text-slate-100"],
-.light [class*="text-slate-100"],
-html:not(.dark) [class*="text-slate-200"],
-.light [class*="text-slate-200"],
-html:not(.dark) [class*="text-slate-300"],
-.light [class*="text-slate-300"],
-html:not(.dark) [class*="text-gray-100"],
-.light [class*="text-gray-100"],
-html:not(.dark) [class*="text-gray-200"],
-.light [class*="text-gray-200"],
-html:not(.dark) [class*="text-zinc-100"],
-.light [class*="text-zinc-100"],
-html:not(.dark) [class*="text-zinc-200"],
-.light [class*="text-zinc-200"] {
-  color: #000000 !important;
+html:not(.dark) [class*="text-[#F1F5F9]"],
+.light [class*="text-[#F1F5F9]"] {
+  color: #35291C !important;
+}
+
+html:not(.dark) .text-slate-100,
+.light .text-slate-100,
+html:not(.dark) .text-slate-200,
+.light .text-slate-200,
+html:not(.dark) .text-slate-300,
+.light .text-slate-300 {
+  color: #35291C !important;
+}
+
+html:not(.dark) .text-slate-400,
+.light .text-slate-400 {
+  color: #7A6B59 !important;
 }
 
 /* 8. Headings in Light Mode */
@@ -271,93 +284,94 @@ html:not(.dark) h6,
 .light h4,
 .light h5,
 .light h6 {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
-/* 9. Selective text-white mapping:
-   Ensures text on buttons, cards, badges, headings, and data blocks
-   is high-contrast (#0F172A) in light mode UNLESS the element genuinely has a solid dark/colored background.
-*/
+/* 9. Selective text-white mapping: Keep primary action buttons white, make card values/headings dark */
 html:not(.dark) .text-white:not(
-  button[class*="bg-[#3B82F6]"],
-  button[class*="bg-[#3B82F6]"] *,
-  button[class*="bg-[#7C3AED]"],
-  button[class*="bg-[#7C3AED]"] *,
-  button[class*="bg-[#2563EB]"],
-  button[class*="bg-[#2563EB]"] *,
-  button[class*="bg-[#1D4ED8]"],
-  button[class*="bg-[#1D4ED8]"] *,
-  [class*="bg-[#3B82F6]"] *,
-  [class*="bg-[#7C3AED]"] *,
-  [class*="bg-[#1D4ED8]"] *,
-  [class*="from-[#3B82F6]"],
-  [class*="from-[#3B82F6]"] *,
-  [class*="from-[#7C3AED]"],
-  [class*="from-[#7C3AED]"] *,
-  [class*="from-[#1D4ED8]"],
-  [class*="from-[#1D4ED8]"] *,
-  [class*="bg-blue-600"],
-  [class*="bg-blue-600"] *,
-  [class*="bg-purple-600"],
-  [class*="bg-purple-600"] *,
-  [class*="bg-emerald-600"],
-  [class*="bg-emerald-600"] *
+  button[class*="bg-[#8D7A62]"],
+  button[class*="bg-[#8D7A62]"] *,
+  button[class*="bg-[#6E5A44]"],
+  button[class*="bg-[#6E5A44]"] *,
+  button[class*="bg-[#E8A267]"],
+  button[class*="bg-[#E8A267]"] *,
+  button[class*="bg-[#14B8A6]"],
+  button[class*="bg-[#14B8A6]"] *,
+  [class*="bg-[#8D7A62]"] *,
+  [class*="bg-[#6E5A44]"] *,
+  [class*="bg-[#E8A267]"] *,
+  [class*="bg-emerald-"],
+  [class*="bg-emerald-"] *,
+  [class*="bg-teal-"],
+  [class*="bg-teal-"] *,
+  [class*="bg-orange-"],
+  [class*="bg-orange-"] *,
+  [class*="bg-amber-600"],
+  [class*="bg-amber-600"] *,
+  [class*="from-[#8D7A62]"],
+  [class*="from-[#8D7A62]"] *,
+  [class*="from-[#6E5A44]"],
+  [class*="from-[#6E5A44]"] *,
+  [class*="from-emerald-"],
+  [class*="from-emerald-"] *
 ),
 .light .text-white:not(
-  button[class*="bg-[#3B82F6]"],
-  button[class*="bg-[#3B82F6]"] *,
-  button[class*="bg-[#7C3AED]"],
-  button[class*="bg-[#7C3AED]"] *,
-  button[class*="bg-[#2563EB]"],
-  button[class*="bg-[#2563EB]"] *,
-  button[class*="bg-[#1D4ED8]"],
-  button[class*="bg-[#1D4ED8]"] *,
-  [class*="bg-[#3B82F6]"] *,
-  [class*="bg-[#7C3AED]"] *,
-  [class*="bg-[#1D4ED8]"] *,
-  [class*="from-[#3B82F6]"],
-  [class*="from-[#3B82F6]"] *,
-  [class*="from-[#7C3AED]"],
-  [class*="from-[#7C3AED]"] *,
-  [class*="from-[#1D4ED8]"],
-  [class*="from-[#1D4ED8]"] *,
-  [class*="bg-blue-600"],
-  [class*="bg-blue-600"] *,
-  [class*="bg-purple-600"],
-  [class*="bg-purple-600"] *,
-  [class*="bg-emerald-600"],
-  [class*="bg-emerald-600"] *
+  button[class*="bg-[#8D7A62]"],
+  button[class*="bg-[#8D7A62]"] *,
+  button[class*="bg-[#6E5A44]"],
+  button[class*="bg-[#6E5A44]"] *,
+  button[class*="bg-[#E8A267]"],
+  button[class*="bg-[#E8A267]"] *,
+  button[class*="bg-[#14B8A6]"],
+  button[class*="bg-[#14B8A6]"] *,
+  [class*="bg-[#8D7A62]"] *,
+  [class*="bg-[#6E5A44]"] *,
+  [class*="bg-[#E8A267]"] *,
+  [class*="bg-emerald-"],
+  [class*="bg-emerald-"] *,
+  [class*="bg-teal-"],
+  [class*="bg-teal-"] *,
+  [class*="bg-orange-"],
+  [class*="bg-orange-"] *,
+  [class*="bg-amber-600"],
+  [class*="bg-amber-600"] *,
+  [class*="from-[#8D7A62]"],
+  [class*="from-[#8D7A62]"] *,
+  [class*="from-[#6E5A44]"],
+  [class*="from-[#6E5A44]"] *,
+  [class*="from-emerald-"],
+  [class*="from-emerald-"] *
 ) {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
-/* Secondary Buttons with light background */
-html:not(.dark) button[class*="bg-[#262220]"],
-html:not(.dark) button[class*="bg-[#1C1917]"],
-.light button[class*="bg-[#262220]"],
-.light button[class*="bg-[#1C1917]"],
+/* Secondary Buttons with light background: ensure text is dark */
+html:not(.dark) button[class*="bg-[#241F17]"],
+html:not(.dark) button[class*="bg-[#1D1913]"],
+.light button[class*="bg-[#241F17]"],
+.light button[class*="bg-[#1D1913]"],
 html:not(.dark) button[class*="bg-[#172438]"],
 html:not(.dark) button[class*="bg-[#111C2E]"],
 .light button[class*="bg-[#172438]"],
 .light button[class*="bg-[#111C2E]"] {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
-html:not(.dark) button[class*="bg-[#262220]"] *,
-html:not(.dark) button[class*="bg-[#1C1917]"] *,
-.light button[class*="bg-[#262220]"] *,
-.light button[class*="bg-[#1C1917]"] *,
+html:not(.dark) button[class*="bg-[#241F17]"] *,
+html:not(.dark) button[class*="bg-[#1D1913]"] *,
+.light button[class*="bg-[#241F17]"] *,
+.light button[class*="bg-[#1D1913]"] *,
 html:not(.dark) button[class*="bg-[#172438]"] *,
 html:not(.dark) button[class*="bg-[#111C2E]"] *,
 .light button[class*="bg-[#172438]"] *,
 .light button[class*="bg-[#111C2E]"] * {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
 /* 10. Hover text */
 html:not(.dark) [class*="hover:text-white"]:hover,
 .light [class*="hover:text-white"]:hover {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
 /* 11. Form Inputs, Selects, Textareas */
@@ -368,38 +382,38 @@ html:not(.dark) textarea,
 .light select,
 .light textarea {
   background-color: #FFFFFF !important;
-  color: #0F172A !important;
-  border-color: #E2E8F0 !important;
+  color: #35291C !important;
+  border-color: #E3DFD8 !important;
 }
 
 html:not(.dark) input::placeholder,
 html:not(.dark) textarea::placeholder,
 .light input::placeholder,
 .light textarea::placeholder {
-  color: #94A3B8 !important;
+  color: #A79A8A !important;
 }
 
 html:not(.dark) select option,
 .light select option {
   background-color: #FFFFFF !important;
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
 /* 12. Sidebar in Light Mode */
 html:not(.dark) aside,
 .light aside {
-  background-color: #FFFFFF !important;
-  border-right-color: #E2E8F0 !important;
-  color: #0F172A !important;
+  background-color: #FBFAF7 !important;
+  border-right-color: #E3DFD8 !important;
+  color: #35291C !important;
 }
 
 /* 13. Recharts SVG Elements & Tooltip in Light Mode */
 html:not(.dark) .recharts-default-tooltip,
 .light .recharts-default-tooltip {
-  background-color: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  color: #0F172A !important;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08) !important;
+  background-color: #FBFAF7 !important;
+  border: 1px solid #E3DFD8 !important;
+  color: #35291C !important;
+  box-shadow: 0 10px 25px -5px rgba(53, 41, 28, 0.1) !important;
   border-radius: 12px !important;
 }
 
@@ -407,31 +421,31 @@ html:not(.dark) .recharts-tooltip-item,
 html:not(.dark) .recharts-tooltip-label,
 .light .recharts-tooltip-item,
 .light .recharts-tooltip-label {
-  color: #0F172A !important;
+  color: #35291C !important;
 }
 
 html:not(.dark) .recharts-cartesian-grid line,
 .light .recharts-cartesian-grid line {
-  stroke: #E2E8F0 !important;
+  stroke: #E3DFD8 !important;
 }
 
 html:not(.dark) .recharts-text,
 .light .recharts-text {
-  fill: #64748B !important;
+  fill: #7A6B59 !important;
 }
 
 html:not(.dark) .recharts-cartesian-axis-line,
 .light .recharts-cartesian-axis-line {
-  stroke: #E2E8F0 !important;
+  stroke: #E3DFD8 !important;
 }
 
 /* 14. Modals in Light Mode */
 html:not(.dark) [class*="bg-black/80"],
 .light [class*="bg-black/80"] {
-  background-color: rgba(15, 23, 42, 0.4) !important;
+  background-color: rgba(53, 41, 28, 0.45) !important;
 }
 
-/* 15. Card hover and scrollbar */
+/* 15. Modern Z-Elevation & Subtle 3D Card Dynamics */
 .card-z {
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, box-shadow;
@@ -439,14 +453,13 @@ html:not(.dark) [class*="bg-black/80"],
 
 .card-z:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.35);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(141, 122, 98, 0.25);
 }
 
 html:not(.dark) .card-z:hover,
 .light .card-z:hover {
-  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 12px 30px -10px rgba(53, 41, 28, 0.15), 0 0 0 1px rgba(141, 122, 98, 0.3);
 }
-
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -455,10 +468,10 @@ html:not(.dark) .card-z:hover,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #3A3226;
   border-radius: 9999px;
 }
 html:not(.dark) ::-webkit-scrollbar-thumb,
 .light ::-webkit-scrollbar-thumb {
-  background: #E2E8F0 !important;
+  background: #D6D0C7 !important;
 }
