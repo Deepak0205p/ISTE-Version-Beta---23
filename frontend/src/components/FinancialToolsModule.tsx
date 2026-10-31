@@ -981,7 +981,7 @@ export const FinancialToolsModule: React.FC = () => {
   };
 
   const results = computeResults();
-  const COLORS = ['#3B82F6', '#10B981', '#7C3AED', '#F59E0B'];
+  const COLORS = ['#8F7D65', '#10B981', '#C98A32', '#F59E0B'];
 
   const categories: { id: CalculatorCategory; label: string }[] = [
     { id: 'INVESTMENT', label: 'Investment & SIP' },
@@ -996,7 +996,7 @@ export const FinancialToolsModule: React.FC = () => {
   return (
     <div className="space-y-4 animate-fadeIn pb-8">
       {/* Category Tabs Bar (Divider line removed) */}
-      <div className="sticky top-0 z-20 bg-[#F8FAFC]/95 dark:bg-[#0F172A]/95 backdrop-blur-md pt-1 pb-2">
+      <div className="sticky top-0 z-20 bg-[#F8F7F4]/95 dark:bg-[#121008]/95 backdrop-blur-md pt-1 pb-2">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {categories.map(cat => (
             <button
@@ -1008,8 +1008,8 @@ export const FinancialToolsModule: React.FC = () => {
               }}
               className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                 selectedCategory === cat.id
-                  ? 'bg-[#3B82F6] text-white shadow-md shadow-[#3B82F6]/25'
-                  : 'bg-white dark:bg-[#1E293B] text-black dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-[#334155]'
+                  ? 'bg-[#8F7D65] text-white shadow-md shadow-[#8F7D65]/25'
+                  : 'bg-white dark:bg-[#1D1913] text-black dark:text-[#94A3B8] hover:text-[#121008] dark:hover:text-white border border-[#E6E1D8] dark:border-[#3A3226]'
               }`}
             >
               {cat.label}
@@ -1020,12 +1020,12 @@ export const FinancialToolsModule: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left: Calculator Switcher List (Compact & neat) */}
-        <div className="lg:col-span-3 bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-2xl p-2.5 shadow-xs flex flex-col">
+        <div className="lg:col-span-3 bg-white dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] rounded-2xl p-2.5 shadow-xs flex flex-col">
           <div className="flex items-center justify-between px-2 mb-2">
             <span className="text-[11px] font-bold text-slate-500 dark:text-[#94A3B8] uppercase tracking-wider">
               Calculators
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3B82F6]/10 text-[#3B82F6] font-bold">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8F7D65]/10 text-[#8F7D65] font-bold">
               {filteredCatalog.length}
             </span>
           </div>
@@ -1038,8 +1038,8 @@ export const FinancialToolsModule: React.FC = () => {
                   onClick={() => handleSelectCalculator(calc.id)}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-between gap-2 ${
                     isSelected
-                      ? 'bg-[#3B82F6] text-white shadow-xs font-semibold'
-                      : 'text-slate-700 dark:text-[#94A3B8] hover:bg-slate-100 dark:hover:bg-[#273549] hover:text-[#0F172A] dark:hover:text-white'
+                      ? 'bg-[#8F7D65] text-white shadow-xs font-semibold'
+                      : 'text-slate-700 dark:text-[#94A3B8] hover:bg-slate-100 dark:hover:bg-[#273549] hover:text-[#121008] dark:hover:text-white'
                   }`}
                 >
                   <div className="truncate">
@@ -1053,22 +1053,22 @@ export const FinancialToolsModule: React.FC = () => {
         </div>
 
         {/* Right: Active Calculator Form & Real-time Graphical Breakdown */}
-        <div className="lg:col-span-9 bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+        <div className="lg:col-span-9 bg-white dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#E2E8F0] dark:border-[#334155] pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#E6E1D8] dark:border-[#3A3226] pb-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3B82F6]/10 text-[#3B82F6] font-bold uppercase tracking-wider">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8F7D65]/10 text-[#8F7D65] font-bold uppercase tracking-wider">
                   Verified Engine
                 </span>
                 <span className="text-xs text-black dark:text-[#94A3B8]">Compound Mathematical Modeling</span>
               </div>
-              <h2 className="text-lg font-bold text-[#0F172A] dark:text-white leading-tight">{currentCalc.name}</h2>
+              <h2 className="text-lg font-bold text-[#121008] dark:text-white leading-tight">{currentCalc.name}</h2>
               <p className="text-xs text-slate-500 dark:text-[#94A3B8] mt-0.5 max-w-xl line-clamp-1">{currentCalc.description}</p>
             </div>
             <button
               onClick={() => setInputs(currentCalc.defaultInputs)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-[#273549] hover:bg-[#F1F5F9] dark:hover:bg-[#334155] border border-[#E2E8F0] dark:border-[#334155] text-black dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white text-xs font-medium transition cursor-pointer self-start sm:self-auto shrink-0 shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F8F7F4] dark:bg-[#273549] hover:bg-[#F1F5F9] dark:hover:bg-[#3A3226] border border-[#E6E1D8] dark:border-[#3A3226] text-black dark:text-[#94A3B8] hover:text-[#121008] dark:hover:text-white text-xs font-medium transition cursor-pointer self-start sm:self-auto shrink-0 shadow-xs"
             >
               <RotateCcw size={13} /> Reset
             </button>
@@ -1094,11 +1094,11 @@ export const FinancialToolsModule: React.FC = () => {
                   return (
                     <div
                       key={key}
-                      className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] border border-[#E2E8F0] dark:border-[#334155] hover:border-[#3B82F6]/40 transition space-y-1.5"
+                      className="p-3 rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] hover:border-[#8F7D65]/40 transition space-y-1.5"
                     >
                       <div className="flex items-center justify-between text-xs">
                         <div className="pr-2 truncate">
-                          <span className="text-[#0F172A] dark:text-white font-semibold block truncate">
+                          <span className="text-[#121008] dark:text-white font-semibold block truncate">
                             {meta.label}
                           </span>
                           {meta.description && (
@@ -1115,7 +1115,7 @@ export const FinancialToolsModule: React.FC = () => {
                             step={meta.step}
                             value={val}
                             onChange={e => handleInputChange(key, Number(e.target.value))}
-                            className="w-24 bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#334155] focus:border-[#3B82F6] text-[#0F172A] dark:text-white text-xs font-semibold rounded-lg px-2 py-0.5 font-tabular text-right shadow-xs outline-none"
+                            className="w-24 bg-white dark:bg-[#1D1913] border border-[#CBD5E1] dark:border-[#3A3226] focus:border-[#8F7D65] text-[#121008] dark:text-white text-xs font-semibold rounded-lg px-2 py-0.5 font-tabular text-right shadow-xs outline-none"
                           />
                           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 w-8 text-left">
                             {meta.unit === 'PCT' ? '%' : meta.unit === 'YEARS' ? 'Yrs' : meta.unit === 'MONTHS' ? 'Mo' : meta.unit === 'AGE' ? 'Yrs' : '₹'}
@@ -1129,7 +1129,7 @@ export const FinancialToolsModule: React.FC = () => {
                         step={meta.step}
                         value={val}
                         onChange={e => handleInputChange(key, Number(e.target.value))}
-                        className="w-full accent-[#3B82F6] cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg"
+                        className="w-full accent-[#8F7D65] cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg"
                       />
                     </div>
                   );
@@ -1140,7 +1140,7 @@ export const FinancialToolsModule: React.FC = () => {
             {/* Right: Modern Compact Metric & Chart Deck (5 Cols) */}
             <div className="xl:col-span-5 space-y-3">
               {/* Maturity Headline Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border border-[#3B82F6]/30 shadow-xs space-y-2">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border border-[#8F7D65]/30 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-[#2563EB] dark:text-[#60A5FA] uppercase tracking-wider">
                     {(results as any).maturityLabel || 'Estimated Corpus'}
@@ -1152,7 +1152,7 @@ export const FinancialToolsModule: React.FC = () => {
                   )}
                 </div>
 
-                <div className="text-2xl font-extrabold text-[#0F172A] dark:text-white font-tabular tracking-tight">
+                <div className="text-2xl font-extrabold text-[#121008] dark:text-white font-tabular tracking-tight">
                   {currentCalc.id === 'rule72'
                     ? `${results.maturity.toFixed(1)} Years`
                     : formatINR(results.maturity)}
@@ -1164,7 +1164,7 @@ export const FinancialToolsModule: React.FC = () => {
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">
                       {(results as any).investedLabel || 'Capital Invested'}
                     </span>
-                    <span className="font-bold text-[#0F172A] dark:text-white font-tabular text-xs mt-0.5 block">
+                    <span className="font-bold text-[#121008] dark:text-white font-tabular text-xs mt-0.5 block">
                       {currentCalc.id === 'rule72' ? `${inputs.annualRate}% Rate` : formatINR(results.invested)}
                     </span>
                   </div>
@@ -1180,7 +1180,7 @@ export const FinancialToolsModule: React.FC = () => {
               </div>
 
               {/* Real World Projections (Inflation & Tax) */}
-              <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] border border-[#E2E8F0] dark:border-[#334155] space-y-2 text-xs">
+              <div className="p-3.5 rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] space-y-2 text-xs">
                 {(results as any).realPurchasingPower !== undefined && (
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
@@ -1196,7 +1196,7 @@ export const FinancialToolsModule: React.FC = () => {
                     <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                       <ShieldCheck size={13} className="text-blue-500" /> Post-Tax In-Hand:
                     </span>
-                    <span className="font-bold text-[#0F172A] dark:text-white font-tabular text-xs">
+                    <span className="font-bold text-[#121008] dark:text-white font-tabular text-xs">
                       {formatINR((results as any).postTaxMaturity)}
                     </span>
                   </div>
@@ -1213,7 +1213,7 @@ export const FinancialToolsModule: React.FC = () => {
 
               {/* Compact Pie Chart Visualization */}
               {results.breakdown && results.breakdown.length > 0 && (
-                <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0F172A] border border-[#E2E8F0] dark:border-[#334155] space-y-2">
+                <div className="p-4 rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] space-y-2">
                   <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                     <span>Portfolio Split</span>
                     <span>100% Capital Breakdown</span>
@@ -1235,7 +1235,7 @@ export const FinancialToolsModule: React.FC = () => {
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ backgroundColor: '#1E293B', borderColor: '#334155', borderRadius: '10px', color: '#FFF' }}
+                          contentStyle={{ backgroundColor: '#1D1913', borderColor: '#3A3226', borderRadius: '10px', color: '#FFF' }}
                           formatter={(val: any) => [formatINR(Number(val)), 'Amount']}
                         />
                       </PieChart>
@@ -1245,7 +1245,7 @@ export const FinancialToolsModule: React.FC = () => {
                     {results.breakdown.map((item, idx) => (
                       <div key={item.name} className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                        <span>{item.name}: <strong className="text-[#0F172A] dark:text-white font-tabular">{formatCompactINR(item.value)}</strong></span>
+                        <span>{item.name}: <strong className="text-[#121008] dark:text-white font-tabular">{formatCompactINR(item.value)}</strong></span>
                       </div>
                     ))}
                   </div>

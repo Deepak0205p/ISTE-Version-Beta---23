@@ -319,7 +319,7 @@ app.post("/api/wipe", (_req, res) => {
 });
 
 // Helper to build full workspace snapshot
-function buildWorkspaceSnapshot() {
+function buildWorkspaceSnapshot(targetAmountInr: number = 80000) {
   const txns = allTransactions();
   const stats = ledgerStats();
 
@@ -376,7 +376,7 @@ function buildWorkspaceSnapshot() {
     };
   });
 
-  const targetPaise = 8000000;
+  const targetPaise = Math.round(targetAmountInr * 100);
   const committedPaise = recurring.reduce((sum, r) => sum + r.monthly_equivalent_paise, 0);
   const expectedIncomePaise = Math.round(txns.filter((t) => t.amount_paise > 0).reduce((acc, t) => acc + t.amount_paise, 0));
   const variableSpendPaise = Math.round(txns.filter((t) => t.amount_paise < 0).reduce((acc, t) => acc + Math.abs(t.amount_paise), 0));
@@ -494,7 +494,8 @@ app.all("/api/ps4", upload.array("files"), async (req, res) => {
       }
 
       if (body.action === "question") {
-        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot() });
+        const amt = Number(body.amount_inr) || 80000;
+        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot(amt) });
       }
     }
 
@@ -608,7 +609,7 @@ app.post("/api/advisor/chat", async (req, res) => {
 
     // 1. Intelligent Query Classifier: Decide automatically whether web search is required
     let webSources: Array<{ title: string; url: string; snippet: string }> = [];
-
+    
     // Explicit queries asking about personal finance, savings, or user ledger
     const isPersonalFinanceQuery = /\b(my savings|my balance|my loan|my emi|my expense|my budget|my goal|my salary|how much did i spend|my account|my portfolio|i afford|can i buy|tell me about my|my cashflow)\b/i.test(message);
 
@@ -721,7 +722,7 @@ ${webContext}`;
       throw new Error(`Gemini generation failed: ${gemRes.statusText}`);
     }
 
-    const gemData = (await gemRes.json()) as any;
+    const gemData = await gemRes.json() as any;
     const aiText = gemData.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to generate a response. Please try again.";
 
     res.json({

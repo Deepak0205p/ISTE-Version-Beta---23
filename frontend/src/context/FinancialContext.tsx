@@ -20,8 +20,16 @@ import {
 import {
   initialFamily,
   initialStudents,
+  initialEducationExpenses,
+  initialLoans,
+  initialBankAccounts,
+  initialTransactions,
+  initialExpenses,
+  initialInvestments,
+  initialGoals,
 } from '../data/initialData';
 import { categorizeDescriptor } from '../utils/merchantLexicon';
+import { detectHabitualExpenses } from '../utils/anomalyEngine';
 
 interface FinancialContextType {
   // Navigation & Theme
@@ -53,24 +61,31 @@ interface FinancialContextType {
   habitualExpenses: HabitualExpense[];
   updateHabitualStatus: (id: string, status: 'CONFIRMED' | 'DETECTED' | 'DISMISSED') => void;
   addHabitualExpense: (expense: Omit<HabitualExpense, 'id'>) => void;
+  deleteHabitualExpense: (id: string) => void;
 
   medicalExpenses: MedicalExpenseRecord[];
   addMedicalExpense: (record: Omit<MedicalExpenseRecord, 'id'>) => void;
   updateMedicalExpense: (id: string, record: Partial<MedicalExpenseRecord>) => void;
+  deleteMedicalExpense: (id: string) => void;
 
   students: StudentProfile[];
+  addStudent: (student: Omit<StudentProfile, 'id'>) => void;
   educationExpenses: EducationExpenseRecord[];
   addEducationExpense: (record: Omit<EducationExpenseRecord, 'id'>) => void;
+  deleteEducationExpense: (id: string) => void;
 
   loans: LoanRecord[];
   addLoan: (loan: Omit<LoanRecord, 'id'>) => void;
+  deleteLoan: (id: string) => void;
   recordLoanPrepayment: (loanId: string, amount: number) => void;
 
   investments: InvestmentAsset[];
   addInvestment: (inv: Omit<InvestmentAsset, 'id'>) => void;
+  deleteInvestment: (id: string) => void;
 
   goals: FinancialGoal[];
   addGoal: (goal: Omit<FinancialGoal, 'id'>) => void;
+  deleteGoal: (id: string) => void;
   contributeToGoal: (goalId: string, amount: number) => void;
 
   transactions: TransactionRecord[];
@@ -103,10 +118,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
   const [activeSubmodule, setActiveSubmodule] = useState<string>('expense-manager');
   
-  // Theme State
+  // Theme State: Default to Money Matters Warm Off-White palette
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = browserStorage?.getItem('mm_theme');
-    return saved !== null ? saved === 'dark' : false; // Default to Money Matters Clean Light mode
+    return saved !== null ? saved === 'dark' : false; // Default to Warm Off-White light mode
   });
 
   useEffect(() => {
@@ -130,15 +145,27 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Collections state
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialBankAccounts;
     const saved = browserStorage.getItem('mm_bank_accounts');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialBankAccounts;
   });
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialExpenses;
     const saved = browserStorage.getItem('mm_expenses');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialExpenses;
   });
 
   const [habitualExpenses, setHabitualExpenses] = useState<HabitualExpense[]>(() => {
@@ -153,35 +180,76 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [students] = useState<StudentProfile[]>(initialStudents);
+  const [students, setStudents] = useState<StudentProfile[]>(() => {
+    if (!browserStorage) return initialStudents;
+    const saved = browserStorage.getItem('mm_students');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialStudents;
+  });
+
   const [educationExpenses, setEducationExpenses] = useState<EducationExpenseRecord[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialEducationExpenses;
     const saved = browserStorage.getItem('mm_education');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialEducationExpenses;
   });
 
   const [loans, setLoans] = useState<LoanRecord[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialLoans;
     const saved = browserStorage.getItem('mm_loans');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialLoans;
   });
 
   const [investments, setInvestments] = useState<InvestmentAsset[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialInvestments;
     const saved = browserStorage.getItem('mm_investments');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialInvestments;
   });
 
   const [goals, setGoals] = useState<FinancialGoal[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialGoals;
     const saved = browserStorage.getItem('mm_goals');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialGoals;
   });
 
   const [transactions, setTransactions] = useState<TransactionRecord[]>(() => {
-    if (!browserStorage) return [];
+    if (!browserStorage) return initialTransactions;
     const saved = browserStorage.getItem('mm_transactions');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return initialTransactions;
   });
 
   // Sync with backend API (/api/ingest) on load and on demand
@@ -223,8 +291,14 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         acc.totalBalance += t.amount_paise / 100;
         accountMap.set(accountId, acc);
 
+        const userOverrides: Record<string, ExpenseCategory> = browserStorage
+          ? JSON.parse(browserStorage.getItem('mm_category_overrides') || '{}')
+          : {};
+        const normDesc = description.toLowerCase().trim();
+        const overriddenCat = userOverrides[normDesc] || Object.entries(userOverrides).find(([k]) => normDesc.includes(k) || k.includes(normDesc))?.[1];
+
         const lex = categorizeDescriptor(description);
-        const mappedCat: ExpenseCategory = lex.category;
+        const mappedCat: ExpenseCategory = overriddenCat || lex.category;
 
         const txRecord: TransactionRecord = {
           id: `be-tx-${t.id || t.clean_narration}-${t.date}`,
@@ -272,7 +346,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ownerId: currentUser.id,
         ownerName: currentUser.name,
         status: 'ACTIVE',
-        color: ['#8D7A62', '#3B82F6', '#10B981', '#F59E0B'][idx % 4],
+        color: ['#3B82F6', '#4F7CAC', '#16A579', '#7C3AED'][idx % 4],
       }));
 
       setTransactions(mappedTransactions);
@@ -280,6 +354,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (mappedAccounts.length > 0) {
         setBankAccounts(mappedAccounts);
       }
+
+      // Automatically synthesize habitual expenses from detected recurring patterns
+      setHabitualExpenses(prev => detectHabitualExpenses(mappedExpenses, prev));
     } catch {
       // Backend sync error handled gracefully
     }
@@ -326,6 +403,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [medicalExpenses, browserStorage]);
 
   useEffect(() => {
+    browserStorage?.setItem('mm_students', JSON.stringify(students));
+  }, [students, browserStorage]);
+
+  useEffect(() => {
     browserStorage?.setItem('mm_education', JSON.stringify(educationExpenses));
   }, [educationExpenses, browserStorage]);
 
@@ -349,6 +430,24 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addBankAccount = (acc: Omit<BankAccount, 'id'>) => {
     const newAccount: BankAccount = { ...acc, id: `bank-${Date.now()}` };
     setBankAccounts(prev => [...prev, newAccount]);
+
+    // Persist account and opening balance to backend
+    fetch('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newAccount.id,
+        bank: newAccount.bankName,
+        label: newAccount.nickname || newAccount.bankName,
+        opening_balance: newAccount.openingBalance || 0,
+      }),
+    })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
   };
 
   const addExpense = (exp: Omit<ExpenseRecord, 'id'>) => {
@@ -380,6 +479,26 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       verificationStatus: 'VERIFIED'
     };
     setTransactions(prev => [newTx, ...prev]);
+
+    // Persist to backend ledger
+    fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: newExp.amount,
+        description: newExp.description,
+        date: newExp.date,
+        type: 'debit',
+        category: newExp.category,
+        account_id: newExp.bankAccountId || 'Primary_Account',
+      }),
+    })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
   };
 
   const updateExpense = (id: string, updated: Partial<ExpenseRecord>) => {
@@ -396,6 +515,102 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       return e;
     }));
+
+    // Also persist correction to backend alias table
+    fetch('/api/correction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pattern: targetDesc,
+        category: newCategory,
+      }),
+    })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
+
+    // Update local overrides map so subsequent syncs preserve the user choice
+    if (browserStorage) {
+      const overrides = JSON.parse(browserStorage.getItem('mm_category_overrides') || '{}');
+      overrides[norm] = newCategory;
+      browserStorage.setItem('mm_category_overrides', JSON.stringify(overrides));
+    }
+
+    // Auto-link: if user selects category corresponding to a dedicated sub-module,
+    // automatically mirror it into that module so it appears on that tab
+    if (newCategory === 'Medical & Health') {
+      const matched = expenses.filter(e => e.description.toLowerCase().includes(norm) || norm.includes(e.description.toLowerCase()));
+      matched.forEach(item => {
+        setMedicalExpenses(prev => {
+          if (prev.some(m => m.id === `med-auto-${item.id}` || m.notes === item.id)) return prev;
+          return [
+            {
+              id: `med-auto-${item.id}`,
+              patientName: item.familyMemberName || currentUser.name || 'Self',
+              date: item.date,
+              type: 'Doctor Consultation',
+              amount: item.amount,
+              insuranceClaimStatus: 'NOT_APPLIED',
+              doctorHospital: item.description,
+              notes: item.id
+            },
+            ...prev
+          ];
+        });
+      });
+    } else if (newCategory === 'Education') {
+      const matched = expenses.filter(e => e.description.toLowerCase().includes(norm) || norm.includes(e.description.toLowerCase()));
+      matched.forEach(item => {
+        const student = students[0];
+        setEducationExpenses(prev => {
+          if (prev.some(ed => ed.id === `edu-auto-${item.id}`)) return prev;
+          return [
+            {
+              id: `edu-auto-${item.id}`,
+              studentId: student?.id || 'stu-default',
+              studentName: student?.studentName || item.familyMemberName || 'Student',
+              date: item.date,
+              type: 'School / College Tuition',
+              amount: item.amount,
+              academicYear: '2026-2027',
+              receiptNumber: item.receiptName || 'AUTO-IMPORT'
+            },
+            ...prev
+          ];
+        });
+      });
+    } else if (newCategory === 'Subscriptions' || newCategory === 'Electricity & Utilities') {
+      const matched = expenses.filter(e => e.description.toLowerCase().includes(norm) || norm.includes(e.description.toLowerCase()));
+      matched.forEach(item => {
+        setHabitualExpenses(prev => {
+          if (prev.some(h => h.title.toLowerCase() === item.description.toLowerCase())) return prev;
+          const d = new Date(item.date);
+          const nextD = new Date(item.date);
+          nextD.setMonth(nextD.getMonth() + 1);
+          return [
+            {
+              id: `hab-auto-${item.id}`,
+              title: item.description,
+              category: newCategory,
+              amount: item.amount,
+              frequency: 'Monthly',
+              expectedDayOfMonth: d.getDate() || 5,
+              lastPaymentDate: item.date,
+              nextPaymentDate: nextD.toISOString().slice(0, 10),
+              historicalChange: 0,
+              confidenceScore: 90,
+              status: 'CONFIRMED',
+              bankAccountId: item.bankAccountId || 'Primary-Account'
+            },
+            ...prev
+          ];
+        });
+      });
+    }
+
     return { updatedCount: count };
   };
 
@@ -405,6 +620,16 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const deleteExpense = (id: string) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
+
+    // Also delete from backend ledger if it corresponds to a backend txn
+    const rawId = id.replace(/^(be-exp-|be-tx-|exp-|tx-)/, '');
+    fetch(`/api/transactions/${rawId}`, { method: 'DELETE' })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
   };
 
   const updateHabitualStatus = (id: string, status: 'CONFIRMED' | 'DETECTED' | 'DISMISSED') => {
@@ -416,18 +641,65 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setHabitualExpenses(prev => [...prev, newHab]);
   };
 
+  const deleteHabitualExpense = (id: string) => {
+    setHabitualExpenses(prev => prev.filter(h => h.id !== id));
+  };
+
   const addMedicalExpense = (med: Omit<MedicalExpenseRecord, 'id'>) => {
     const newMed: MedicalExpenseRecord = { ...med, id: `med-${Date.now()}` };
     setMedicalExpenses(prev => [newMed, ...prev]);
+
+    // Also mirror to global expenses & backend transactions as 'Medical & Health'
+    addExpense({
+      amount: med.amount,
+      category: 'Medical & Health',
+      subcategory: med.type,
+      description: `Medical: ${med.patientName} - ${med.doctorHospital || med.type}`,
+      date: med.date,
+      paymentMethod: 'UPI',
+      bankAccountId: bankAccounts[0]?.id || '',
+      familyMemberId: currentUser.id,
+      familyMemberName: med.patientName,
+      isRecurring: false,
+      status: 'ACTUAL'
+    });
   };
 
   const updateMedicalExpense = (id: string, updated: Partial<MedicalExpenseRecord>) => {
     setMedicalExpenses(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m));
   };
 
+  const deleteMedicalExpense = (id: string) => {
+    setMedicalExpenses(prev => prev.filter(m => m.id !== id));
+  };
+
+  const addStudent = (student: Omit<StudentProfile, 'id'>) => {
+    const newStudent: StudentProfile = { ...student, id: `stu-${Date.now()}` };
+    setStudents(prev => [...prev, newStudent]);
+  };
+
   const addEducationExpense = (edu: Omit<EducationExpenseRecord, 'id'>) => {
     const newEdu: EducationExpenseRecord = { ...edu, id: `edu-${Date.now()}` };
     setEducationExpenses(prev => [newEdu, ...prev]);
+
+    // Also mirror to global expenses & backend transactions as 'Education'
+    addExpense({
+      amount: edu.amount,
+      category: 'Education',
+      subcategory: edu.type,
+      description: `Education: ${edu.studentName} - ${edu.type} (${edu.academicYear})`,
+      date: edu.date,
+      paymentMethod: 'NetBanking',
+      bankAccountId: bankAccounts[0]?.id || '',
+      familyMemberId: currentUser.id,
+      familyMemberName: edu.studentName,
+      isRecurring: false,
+      status: 'ACTUAL'
+    });
+  };
+
+  const deleteEducationExpense = (id: string) => {
+    setEducationExpenses(prev => prev.filter(e => e.id !== id));
   };
 
   const addLoan = (loan: Omit<LoanRecord, 'id'>) => {
@@ -435,7 +707,12 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setLoans(prev => [...prev, newLoan]);
   };
 
+  const deleteLoan = (id: string) => {
+    setLoans(prev => prev.filter(l => l.id !== id));
+  };
+
   const recordLoanPrepayment = (loanId: string, amount: number) => {
+    const targetLoan = loans.find(l => l.id === loanId);
     setLoans(prev => prev.map(l => {
       if (l.id === loanId) {
         const newPrincipal = Math.max(0, l.outstandingPrincipal - amount);
@@ -447,6 +724,23 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       return l;
     }));
+
+    // Record as prepayment expense
+    if (amount > 0) {
+      addExpense({
+        amount,
+        category: 'Loan Repayments / EMI',
+        subcategory: 'Principal Prepayment',
+        description: `Prepayment: ${targetLoan?.name || 'Loan'} (${targetLoan?.lender || ''})`,
+        date: new Date().toISOString().split('T')[0],
+        paymentMethod: 'NetBanking',
+        bankAccountId: bankAccounts[0]?.id || '',
+        familyMemberId: currentUser.id,
+        familyMemberName: currentUser.name,
+        isRecurring: false,
+        status: 'ACTUAL'
+      });
+    }
   };
 
   const addInvestment = (inv: Omit<InvestmentAsset, 'id'>) => {
@@ -454,9 +748,17 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setInvestments(prev => [...prev, newInv]);
   };
 
+  const deleteInvestment = (id: string) => {
+    setInvestments(prev => prev.filter(inv => inv.id !== id));
+  };
+
   const addGoal = (goal: Omit<FinancialGoal, 'id'>) => {
     const newGoal: FinancialGoal = { ...goal, id: `goal-${Date.now()}` };
     setGoals(prev => [...prev, newGoal]);
+  };
+
+  const deleteGoal = (id: string) => {
+    setGoals(prev => prev.filter(g => g.id !== id));
   };
 
   const contributeToGoal = (goalId: string, amount: number) => {
@@ -479,11 +781,31 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const importBankTransactions = (newTxs: Omit<TransactionRecord, 'id'>[]) => {
-    const stamped = newTxs.map((t, idx) => ({
+    const stamped: TransactionRecord[] = newTxs.map((t, idx) => ({
       ...t,
       id: `tx-imp-${Date.now()}-${idx}`
     }));
     setTransactions(prev => [...stamped, ...prev]);
+
+    // Also mirror debit non-internal transactions into expenses
+    const newExpenses: ExpenseRecord[] = stamped
+      .filter(t => t.type === 'DEBIT' && !t.isInternalTransfer)
+      .map(t => ({
+        id: `exp-${t.id}`,
+        amount: t.amount,
+        date: t.date,
+        category: t.category,
+        paymentMethod: t.paymentMethod,
+        bankAccountId: t.bankAccountId,
+        description: t.description,
+        familyMemberId: t.associatedUserId || currentUser.id,
+        familyMemberName: currentUser.name,
+        isRecurring: false,
+        status: 'ACTUAL'
+      }));
+    if (newExpenses.length > 0) {
+      setExpenses(prev => [...newExpenses, ...prev]);
+    }
   };
 
   // Rigorous aggregate calculations without double-counting internal transfers
@@ -528,6 +850,15 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       browserStorage.removeItem('mm_goals');
       browserStorage.removeItem('mm_transactions');
     }
+
+    // Also wipe backend SQLite/Firestore ledger so all modules stay synchronized
+    fetch('/api/wipe', { method: 'POST' })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
   };
 
   const netWorth = (totalSavingsBalance + totalInvestmentValuation) - totalLoanPrincipal;
@@ -559,19 +890,26 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         habitualExpenses,
         updateHabitualStatus,
         addHabitualExpense,
+        deleteHabitualExpense,
         medicalExpenses,
         addMedicalExpense,
         updateMedicalExpense,
+        deleteMedicalExpense,
         students,
+        addStudent,
         educationExpenses,
         addEducationExpense,
+        deleteEducationExpense,
         loans,
         addLoan,
+        deleteLoan,
         recordLoanPrepayment,
         investments,
         addInvestment,
+        deleteInvestment,
         goals,
         addGoal,
+        deleteGoal,
         contributeToGoal,
         transactions,
         addTransaction,

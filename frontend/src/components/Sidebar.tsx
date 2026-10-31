@@ -66,8 +66,8 @@ function UserAvatar({
     <div
       className={`${className} rounded-full border flex items-center justify-center shrink-0 overflow-hidden font-semibold select-none ${
         isDarkMode
-          ? "bg-[#2E2820] border-[#334155] text-[#ECEAE6]"
-          : "bg-[#ECEAE6] border-[#CBD5E1] text-[#35291C]"
+          ? "bg-[#273549] border-[#3A3226] text-[#ECEAE6]"
+          : "bg-[#ECEAE6] border-[#CBD5E1] text-[#3A3226]"
       }`}
     >
       {isUrl ? (
@@ -101,8 +101,24 @@ export const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('mm_sidebar_collapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  const toggleCollapsed = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mm_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   const navItems: { id: NavigationTab; href: string; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'overview', href: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
@@ -125,37 +141,37 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`relative flex flex-col border-r transition-all duration-300 select-none z-30 ${
+      className={`relative flex flex-col h-screen sticky top-0 shrink-0 border-r transition-[width] duration-300 ease-in-out select-none z-30 ${
         isCollapsed ? 'w-20' : 'w-72'
       } ${
         isDarkMode
-          ? 'bg-[#1D1913] border-[#3A3226] text-[#F7F5F1]'
-          : 'bg-[#FFFFFF] border-[#E6E1D8] text-[#29241E]'
-      } min-h-screen`}
+          ? 'bg-[#1D1913] border-[#3A3226] text-[#F8F7F4]'
+          : 'bg-[#FFFFFF] border-[#E6E1D8] text-[#121008]'
+      }`}
     >
       {/* Brand Header */}
-      <div className={`flex items-center justify-between p-4 border-b ${isDarkMode ? 'border-[#3A3226]' : 'border-[#E6E1D8]'}`}>
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#6F5D48] to-[#8F7D65] flex items-center justify-center shadow-md shadow-[#8F7D65]/25 shrink-0">
+      <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} p-4 border-b ${isDarkMode ? 'border-[#3A3226]' : 'border-[#E6E1D8]'}`}>
+        <div className={`flex items-center gap-3 overflow-hidden ${isCollapsed ? 'justify-center' : ''}`}>
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#6F5D48] to-[#8F7D65] flex items-center justify-center shadow-lg shadow-[#8F7D65]/20 shrink-0">
             <TrendingUp size={22} className="text-white" />
           </div>
           {!isCollapsed && (
-            <div className="flex flex-col">
-              <span className={`font-extrabold tracking-tight text-lg font-tabular leading-tight ${isDarkMode ? 'text-white' : 'text-[#29241E]'}`}>
+            <div className="flex flex-col min-w-0">
+              <span className={`font-bold tracking-tight text-lg font-tabular leading-tight truncate ${isDarkMode ? 'text-white' : 'text-[#121008]'}`}>
                 MONEY MATTERS
               </span>
-              <span className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? 'text-[#9A9186]' : 'text-[#6F665C]'}`}>
+              <span className={`text-[11px] font-medium tracking-wide truncate ${isDarkMode ? 'text-[#94A3B8]' : 'text-black dark:text-[#94A3B8]'}`}>
                 Unified Wealth Ecosystem
               </span>
             </div>
           )}
         </div>
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+          onClick={toggleCollapsed}
+          className={`p-1.5 rounded-lg transition-colors shrink-0 ${
             isDarkMode
-              ? 'hover:bg-[#241F17] text-[#9A9186] hover:text-white'
-              : 'hover:bg-[#F5F2EC] text-[#6F665C] hover:text-[#29241E]'
+              ? 'hover:bg-[#273549] text-[#94A3B8] hover:text-white'
+              : 'hover:bg-[#F1F5F9] text-black dark:text-[#94A3B8] hover:text-[#121008]'
           }`}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
@@ -170,8 +186,8 @@ export const Sidebar: React.FC = () => {
             onClick={() => setShowUserDropdown(!showUserDropdown)}
             className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all ${
               showUserDropdown
-                ? (isDarkMode ? 'bg-[#241F17]' : 'bg-[#F2ECE3]')
-                : (isDarkMode ? 'hover:bg-[#241F17]/60' : 'hover:bg-[#F5F2EC]')
+                ? (isDarkMode ? 'bg-[#273549]' : 'bg-[#F1F5F9]')
+                : (isDarkMode ? 'hover:bg-[#273549]/60' : 'hover:bg-[#F8F7F4]')
             }`}
           >
             <UserAvatar
@@ -184,14 +200,14 @@ export const Sidebar: React.FC = () => {
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <p className={`text-sm font-semibold truncate ${isDarkMode ? 'text-[#ECEAE6]' : 'text-[#29241E]'}`}>
+                  <p className={`text-sm font-semibold truncate ${isDarkMode ? 'text-[#F8F7F4]' : 'text-[#121008]'}`}>
                     {user.displayName || user.email?.split('@')[0]}
                   </p>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#16A579]/20 text-[#16A579] font-medium">
                     Online
                   </span>
                 </div>
-                <p className={`text-xs truncate ${isDarkMode ? 'text-[#A79A8A]' : 'text-[#6F665C]'}`}>
+                <p className={`text-xs truncate ${isDarkMode ? 'text-[#94A3B8]' : 'text-black dark:text-[#94A3B8]'}`}>
                   {user.email}
                 </p>
               </div>
@@ -202,7 +218,7 @@ export const Sidebar: React.FC = () => {
             {!isCollapsed ? (
               <button
                 onClick={() => setAuthModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-white hover:bg-[#F8F7F4] dark:bg-[#1D1913] dark:hover:bg-[#241F17] border border-[#E6E1D8] dark:border-[#3A3226] text-[#29241E] dark:text-[#F7F5F1] font-semibold text-xs transition shadow-xs cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white font-semibold text-xs transition shadow-md cursor-pointer"
               >
                 <LogIn size={15} />
                 <span>Log In / Sign Up</span>
@@ -210,7 +226,7 @@ export const Sidebar: React.FC = () => {
             ) : (
               <button
                 onClick={() => setAuthModalOpen(true)}
-                className="w-full flex items-center justify-center p-2 rounded-xl bg-white hover:bg-[#F8F7F4] dark:bg-[#1D1913] dark:hover:bg-[#241F17] border border-[#E6E1D8] dark:border-[#3A3226] text-[#29241E] dark:text-[#F7F5F1] transition shadow-xs cursor-pointer"
+                className="w-full flex items-center justify-center p-2 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white transition cursor-pointer"
                 title="Log In / Sign Up"
               >
                 <LogIn size={18} />
@@ -221,10 +237,10 @@ export const Sidebar: React.FC = () => {
 
         {/* Dropdown for Logged-In User Actions */}
         {showUserDropdown && !isCollapsed && user && (
-          <div className={`mt-2 p-2 ${isDarkMode ? 'bg-[#241F17] border-[#3A3226]' : 'bg-white border-[#E6E1D8] shadow-lg'} rounded-xl border text-xs space-y-2`}>
+          <div className={`mt-2 p-2 ${isDarkMode ? 'bg-[#273549] border-[#3A3226]' : 'bg-[#FFFFFF] border-[#E6E1D8] shadow-lg'} rounded-xl border text-xs space-y-2`}>
             <div className={`flex items-center justify-between pb-1 border-b ${isDarkMode ? 'border-[#3A3226]/80' : 'border-[#E6E1D8]'} px-1`}>
-              <span className={`font-medium ${isDarkMode ? 'text-[#A79A8A]' : 'text-[#6F665C]'}`}>Account Status</span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Active Session</span>
+              <span className={`font-medium ${isDarkMode ? 'text-[#94A3B8]' : 'text-black dark:text-[#94A3B8]'}`}>Account Status</span>
+              <span className="text-[10px] text-[#16A579] font-semibold">Active Session</span>
             </div>
 
             <button
@@ -232,7 +248,7 @@ export const Sidebar: React.FC = () => {
                 await logout();
                 setShowUserDropdown(false);
               }}
-              className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer font-medium text-xs text-left"
+              className="w-full flex items-center gap-2 p-2 rounded-lg text-[#D95C52] hover:bg-[#D95C52]/10 transition cursor-pointer font-medium text-xs text-left"
             >
               <LogOut size={14} />
               <span>Sign Out</span>
@@ -242,7 +258,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className={`flex-1 ${isCollapsed ? 'p-2' : 'p-3'} space-y-1 overflow-y-auto overflow-x-hidden`}>
         {navItems.map(item => {
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) || (pathname === '/' && currentTab === item.id);
           return (
@@ -250,24 +266,24 @@ export const Sidebar: React.FC = () => {
               key={item.id}
               href={item.href}
               onClick={() => setCurrentTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition-all text-left relative group ${
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'} rounded-xl font-medium text-sm transition-all text-left relative group ${
                 isActive
                   ? (isDarkMode
-                      ? 'bg-[#241F17] text-[#C9A87E] font-bold shadow-xs'
-                      : 'bg-[#F2ECE3] text-[#29241E] font-bold shadow-xs')
+                      ? 'bg-gradient-to-r from-[#8F7D65]/20 to-transparent text-[#7C3AED] border-l-4 border-[#7C3AED]'
+                      : 'bg-[#F2ECE3] text-[#6F5D48] border-l-4 border-[#8F7D65] font-semibold')
                   : (isDarkMode
-                      ? 'text-[#9A9186] hover:text-[#F7F5F1] hover:bg-[#241F17]/50'
-                      : 'text-[#6F665C] hover:text-[#29241E] hover:bg-[#F5F2EC]')
+                      ? 'text-[#94A3B8] hover:text-[#F8F7F4] hover:bg-[#273549]/50'
+                      : 'text-black dark:text-[#94A3B8] hover:text-[#121008] hover:bg-[#F1F5F9]')
               }`}
             >
-              <div className={`${isActive ? (isDarkMode ? 'text-[#C9A87E]' : 'text-[#6F5D48]') : (isDarkMode ? 'text-[#9A9186] group-hover:text-white' : 'text-[#6F665C] group-hover:text-[#29241E]')}`}>
+              <div className={`shrink-0 flex items-center justify-center ${isActive ? (isDarkMode ? 'text-[#7C3AED]' : 'text-[#6F5D48]') : (isDarkMode ? 'text-[#94A3B8] group-hover:text-white' : 'text-black dark:text-[#94A3B8] group-hover:text-[#121008]')}`}>
                 {item.icon}
               </div>
               {!isCollapsed && <span className="flex-1 truncate">{item.label}</span>}
               {!isCollapsed && item.badge && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold shrink-0 ${
                   isDarkMode
-                    ? 'bg-[#241F17] text-[#8F7D65] border-[#3A3226]'
+                    ? 'bg-[#273549] text-[#7C3AED] border-[#3A3226]'
                     : 'bg-[#F2ECE3] text-[#6F5D48] border-[#E6E1D8]'
                 }`}>
                   {item.badge}
@@ -276,10 +292,10 @@ export const Sidebar: React.FC = () => {
 
               {/* Collapsed Tooltip */}
               {isCollapsed && (
-                <div className={`absolute left-full ml-2 px-2.5 py-1.5 text-xs rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none border transition-opacity z-50 ${
+                <div className={`absolute left-full ml-3 px-2.5 py-1.5 text-xs rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none border transition-opacity z-50 ${
                   isDarkMode
-                    ? 'bg-[#241F17] text-white border-[#3A3226]'
-                    : 'bg-[#29241E] text-white border-[#3A3226]'
+                    ? 'bg-[#273549] text-white border-[#3A3226]'
+                    : 'bg-[#121008] text-white border-[#3A3226]'
                 }`}>
                   {item.label}
                 </div>
@@ -289,44 +305,44 @@ export const Sidebar: React.FC = () => {
         })}
       </nav>
 
-      {/* Footer Controls: Theme Toggle & Security Status with clearance for dev indicators */}
-      <div className={`p-3 pb-6 border-t ${isDarkMode ? 'border-[#3A3226]' : 'border-[#E6E1D8]'} space-y-2`}>
+      {/* Footer Controls: Theme Toggle & Security Status */}
+      <div className={`p-3 border-t ${isDarkMode ? 'border-[#3A3226]' : 'border-[#E6E1D8]'} space-y-2`}>
         <button
           onClick={toggleDarkMode}
-          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+          className={`w-full flex items-center ${isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'} rounded-xl text-xs font-medium transition-all cursor-pointer ${
             isDarkMode
-              ? 'text-[#A79A8A] hover:text-white hover:bg-[#241F17]'
-              : 'text-[#6F665C] hover:text-[#29241E] hover:bg-[#F5F2EC]'
+              ? 'text-[#94A3B8] hover:text-white hover:bg-[#273549]'
+              : 'text-black dark:text-[#94A3B8] hover:text-[#121008] hover:bg-[#F1F5F9]'
           }`}
-          title={isDarkMode ? 'Switch to Clean Light Mode' : 'Switch to Obsidian Dark Mode'}
+          title={isDarkMode ? 'Switch to Warm Taupe Light Mode' : 'Switch to Obsidian Dark Mode'}
         >
           <div className="flex items-center gap-3">
-            {isDarkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} className="text-[#6F5D48]" />}
+            {isDarkMode ? <Sun size={18} className="text-[#7C3AED] shrink-0" /> : <Moon size={18} className="text-[#8F7D65] shrink-0" />}
             {!isCollapsed && (
-              <span className="font-semibold">{isDarkMode ? 'Obsidian Dark' : 'Clean Light'}</span>
+              <span className="font-semibold truncate">{isDarkMode ? 'Obsidian Dark' : 'Warm Off-White'}</span>
             )}
           </div>
           {!isCollapsed && (
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
               isDarkMode
-                ? 'bg-[#241F17] text-amber-300 border-[#3A3226]'
-                : 'bg-[#F5F2EC] text-[#6F5D48] border-[#E6E1D8]'
+                ? 'bg-[#273549] text-[#7C3AED] border-[#3A3226]'
+                : 'bg-[#F2ECE3] text-[#6F5D48] border-[#E6E1D8]'
             }`}>
-              {isDarkMode ? 'Toggle Light' : 'Toggle Obsidian'}
+              {isDarkMode ? 'Switch to Warm Light' : 'Switch to Obsidian'}
             </span>
           )}
         </button>
 
         {!isCollapsed && (
-          <div className={`p-2.5 rounded-xl border text-[11px] flex items-center gap-2.5 ${
+          <div className={`p-2.5 rounded-xl border text-[11px] flex items-center gap-2 ${
             isDarkMode
-              ? 'bg-[#191510]/60 border-[#3A3226]/60 text-[#A79A8A]'
-              : 'bg-[#F8F7F4] border-[#E6E1D8] text-[#6F665C]'
+              ? 'bg-[#121008]/60 border-[#3A3226]/60 text-[#94A3B8]'
+              : 'bg-[#F8F7F4] border-[#E6E1D8] text-black dark:text-[#94A3B8]'
           }`}>
-            <ShieldCheck size={18} className="text-[#16A579] shrink-0" />
+            <ShieldCheck size={16} className="text-[#16A579] shrink-0" />
             <div className="truncate">
-              <p className={`font-bold ${isDarkMode ? 'text-[#CFC4B6]' : 'text-[#29241E]'}`}>Bank-Grade Isolation</p>
-              <p className={`text-[10px] ${isDarkMode ? 'text-[#8A7C6D]' : 'text-[#6F665C]'}`}>256-Bit TLS • Zero Credentials Stored</p>
+              <p className={`font-semibold ${isDarkMode ? 'text-[#F8F7F4]' : 'text-[#121008]'}`}>Bank-Grade Isolation</p>
+              <p className={`text-[10px] ${isDarkMode ? 'text-[#94A3B8]' : 'text-black dark:text-[#94A3B8]'}`}>256-Bit TLS • Zero Credentials Stored</p>
             </div>
           </div>
         )}

@@ -57,8 +57,19 @@ let nextTxnId = 1;
 
 export async function initRepository(): Promise<void> {
   if (initialized) return;
+
+  const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (!saPath) {
+    initialized = true;
+    return;
+  }
+
   try {
     const { db } = getFirebaseAdmin();
+    if (!db) {
+      initialized = true;
+      return;
+    }
     
     const accSnap = await db.collection("accounts").get();
     accSnap.forEach((doc) => {
@@ -83,8 +94,7 @@ export async function initRepository(): Promise<void> {
     });
 
     initialized = true;
-  } catch (err) {
-    console.warn("Firestore sync initialized with memory cache:", err);
+  } catch {
     initialized = true;
   }
 }
@@ -105,7 +115,7 @@ export function upsertAccount(input: {
   accountsCache.set(input.id, row);
 
   try {
-    const { db } = getFirebaseAdmin();
+    const { db } = getFirebaseAdmin(); if (!db) return;
     db.collection("accounts").doc(input.id).set(row, { merge: true }).catch(() => {});
   } catch {}
 }
@@ -156,7 +166,7 @@ export function insertTransactions(txns: LedgerTxn[]): {
 
   if (toSave.length > 0) {
     try {
-      const { db } = getFirebaseAdmin();
+      const { db } = getFirebaseAdmin(); if (!db) return;
       const batch = db.batch();
       toSave.slice(0, 400).forEach((t) => {
         const ref = db.collection("transactions").doc(t.txn_hash);
@@ -178,7 +188,7 @@ export function updateTxnFlags(id: number, flags: TxnFlags): void {
     if (t.id === id) {
       t.flags = { ...t.flags, ...flags };
       try {
-        const { db } = getFirebaseAdmin();
+        const { db } = getFirebaseAdmin(); if (!db) return;
         db.collection("transactions").doc(t.txn_hash).update({ flags: t.flags }).catch(() => {});
       } catch {}
       break;
@@ -191,7 +201,7 @@ export function updateTxnCategory(id: number, category: string): void {
     if (t.id === id) {
       t.category = category;
       try {
-        const { db } = getFirebaseAdmin();
+        const { db } = getFirebaseAdmin(); if (!db) return;
         db.collection("transactions").doc(t.txn_hash).update({ category }).catch(() => {});
       } catch {}
       break;
@@ -204,12 +214,26 @@ export function updateTxnType(id: number, type: LedgerTxn["type"]): void {
     if (t.id === id) {
       t.type = type;
       try {
-        const { db } = getFirebaseAdmin();
+        const { db } = getFirebaseAdmin(); if (!db) return;
         db.collection("transactions").doc(t.txn_hash).update({ type }).catch(() => {});
       } catch {}
       break;
     }
   }
+}
+
+export function deleteTxn(id: number | string): boolean {
+  for (const [hash, t] of txnsCache.entries()) {
+    if (String(t.id) === String(id) || t.txn_hash === String(id)) {
+      txnsCache.delete(hash);
+      try {
+        const { db } = getFirebaseAdmin(); if (!db) return;
+        db.collection("transactions").doc(t.txn_hash).delete().catch(() => {});
+      } catch {}
+      return true;
+    }
+  }
+  return false;
 }
 
 export function persistHygiene(txns: LedgerTxn[]): void {
@@ -264,7 +288,7 @@ export function learnAlias(pattern: string, category: string): { learned: boolea
   aliasesCache.set(norm, row);
 
   try {
-    const { db } = getFirebaseAdmin();
+    const { db } = getFirebaseAdmin(); if (!db) return;
     db.collection("category_aliases").doc(norm).set(row).catch(() => {});
   } catch {}
 
@@ -311,7 +335,7 @@ export function undoCorrection(input: {
   if (input.pattern) {
     aliasesCache.delete(input.pattern);
     try {
-      const { db } = getFirebaseAdmin();
+      const { db } = getFirebaseAdmin(); if (!db) return;
       db.collection("category_aliases").doc(input.pattern).delete().catch(() => {});
     } catch {}
   }
@@ -366,7 +390,7 @@ export function saveVerdict(input: {
   verdictsCache.unshift(record);
 
   try {
-    const { db } = getFirebaseAdmin();
+    const { db } = getFirebaseAdmin(); if (!db) return;
     db.collection("verdicts").doc(String(id)).set(record).catch(() => {});
   } catch {}
 
@@ -403,22 +427,6 @@ export function currentBalancePaise(): number {
   return bal;
 }
 
-export function deleteTxn(id: number | string): boolean {
-  for (const [hash, t] of txnsCache.entries()) {
-    if (String(t.id) === String(id) || t.txn_hash === String(id)) {
-      txnsCache.delete(hash);
-      try {
-        const { db } = getFirebaseAdmin();
-        if (db) {
-          db.collection("transactions").doc(t.txn_hash).delete().catch(() => {});
-        }
-      } catch {}
-      return true;
-    }
-  }
-  return false;
-}
-
 export function wipeAll(): { wiped: true; deleted: Record<string, number> } {
   const counts = {
     accounts: accountsCache.size,
@@ -433,7 +441,7 @@ export function wipeAll(): { wiped: true; deleted: Record<string, number> } {
   verdictsCache = [];
 
   try {
-    const { db } = getFirebaseAdmin();
+    const { db } = getFirebaseAdmin(); if (!db) return;
     ["accounts", "transactions", "category_aliases", "verdicts"].forEach((col) => {
       db.collection(col).listDocuments().then((docs) => {
         docs.forEach((d) => d.delete());
