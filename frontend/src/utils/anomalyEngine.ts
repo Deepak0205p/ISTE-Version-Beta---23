@@ -181,7 +181,7 @@ export function detectHabitualExpenses(
 
   const grouped = new Map<string, ExpenseRecord[]>();
   for (const e of recurring) {
-    const key = e.title.trim().toLowerCase();
+    const key = (e.description || 'Expense').trim().toLowerCase();
     const list = grouped.get(key) || [];
     list.push(e);
     grouped.set(key, list);
@@ -195,7 +195,7 @@ export function detectHabitualExpenses(
       const day = parseInt(latest.date.split('-')[2] || '5', 10);
       synthesized.push({
         id: `habitual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        title: latest.title,
+        title: latest.description || 'Recurring Expense',
         category: latest.category,
         amount: avg,
         frequency: 'Monthly',
@@ -203,6 +203,8 @@ export function detectHabitualExpenses(
         lastPaymentDate: latest.date,
         nextPaymentDate: latest.date,
         historicalChange: 0,
+        status: 'CONFIRMED',
+        bankAccountId: latest.bankAccountId || 'primary',
         confidenceScore: Math.min(95, 60 + records.length * 10),
       });
     }

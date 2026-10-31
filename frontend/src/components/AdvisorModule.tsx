@@ -91,7 +91,7 @@ export const AdvisorModule: React.FC = () => {
       loans: loans.map(l => ({ name: l.name, outstanding: l.outstandingPrincipal, emi: l.emiAmount, rate: l.interestRate })),
       goals: goals.map(g => ({ title: g.title, target: g.targetAmount, current: g.currentAmount, date: g.targetDate })),
       investments: investments.map(i => ({ name: i.name, valuation: i.currentValuation, category: i.category })),
-      bankAccounts: bankAccounts.map(b => ({ bankName: b.bankName, accountType: b.accountType, balance: b.balance })),
+      bankAccounts: bankAccounts.map(b => ({ bankName: b.bankName, accountType: b.accountType, balance: b.currentBalance })),
       updatedAt: new Date().toISOString(),
     };
     syncFinancialProfileToFirestore(userId, profileData);
@@ -324,7 +324,7 @@ Ask any specific question regarding your loans, emergency fund runway, scam veri
         loans: loans.map(l => ({ name: l.name, type: l.type, outstandingPrincipal: l.outstandingPrincipal, emiAmount: l.emiAmount, interestRate: l.interestRate })),
         goals: goals.map(g => ({ title: g.title, category: g.category, targetAmount: g.targetAmount, currentAmount: g.currentAmount, targetDate: g.targetDate })),
         investments: investments.map(i => ({ name: i.name, category: i.category, investedPrincipal: i.investedPrincipal, currentValuation: i.currentValuation, cagrOrXirr: i.cagrOrXirr })),
-        bankAccounts: bankAccounts.map(b => ({ bankName: b.bankName, accountType: b.accountType, balance: b.balance })),
+        bankAccounts: bankAccounts.map(b => ({ bankName: b.bankName, accountType: b.accountType, balance: b.currentBalance })),
         topCategories: expenses.slice(0, 10).map(e => `${e.category}: ₹${e.amount}`).join(', '),
       };
 

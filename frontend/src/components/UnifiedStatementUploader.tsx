@@ -138,7 +138,7 @@ export function UnifiedStatementUploader({
             <option value="ICICI-Direct">ICICI Bank (Direct)</option>
             {bankAccounts.map((acc) => (
               <option key={acc.id} value={acc.nickname || acc.bankName}>
-                {acc.bankName} ({acc.nickname || acc.accountNumberLast4 || "Active"})
+                {acc.bankName} ({acc.nickname || acc.maskedAccountNumber || "Active"})
               </option>
             ))}
           </select>

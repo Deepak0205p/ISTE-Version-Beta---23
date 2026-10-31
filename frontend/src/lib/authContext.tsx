@@ -90,9 +90,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    const { auth } = await getFirebase();
-    await fbSignOut(auth);
+    try {
+      const { auth } = await getFirebase();
+      await fbSignOut(auth);
+    } catch (err) {
+      console.warn("Logout error:", err);
+    }
     setUser(null);
+
+    if (typeof window !== "undefined") {
+      // Clear all financial records and sessions from localStorage on logout
+      const keysToPurge = [
+        "mm_bank_accounts",
+        "mm_expenses",
+        "mm_habitual",
+        "mm_medical",
+        "mm_students",
+        "mm_education",
+        "mm_loans",
+        "mm_investments",
+        "mm_goals",
+        "mm_transactions",
+        "mm_category_overrides",
+        "mm_advisor_sessions",
+        "mm_sessions",
+        "emailForSignIn",
+      ];
+      keysToPurge.forEach((k) => window.localStorage.removeItem(k));
+
+      // Remove all user-scoped statement onboarding flags or keys
+      Object.keys(window.localStorage).forEach((key) => {
+        if (
+          key.startsWith("mm_statement_onboarded_") ||
+          key.startsWith("mm_user_") ||
+          key.startsWith("mm_tx_")
+        ) {
+          window.localStorage.removeItem(key);
+        }
+      });
+
+      // Dispatch event to reset running in-memory React state
+      window.dispatchEvent(new CustomEvent("mm_logout"));
+    }
   };
 
   return (

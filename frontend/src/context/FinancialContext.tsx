@@ -143,6 +143,35 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentUser, setCurrentUser] = useState<UserProfile>(initialFamily.members[0]);
   const [isFamilyView, setIsFamilyView] = useState<boolean>(true);
 
+  // One-time self cleanup: immediately purge legacy hardcoded mock entries from previous sessions
+  if (typeof window !== 'undefined') {
+    const rawBank = window.localStorage.getItem('mm_bank_accounts') || '';
+    const rawLoans = window.localStorage.getItem('mm_loans') || '';
+    const isLegacyMock =
+      rawBank.includes('bank-hdfc-01') ||
+      rawLoans.includes('loan-home-01') ||
+      rawLoans.includes('4500000') ||
+      window.localStorage.getItem('mm_data_version') !== 'v2_clean';
+
+    if (isLegacyMock) {
+      [
+        'mm_bank_accounts',
+        'mm_expenses',
+        'mm_habitual',
+        'mm_medical',
+        'mm_students',
+        'mm_education',
+        'mm_loans',
+        'mm_investments',
+        'mm_goals',
+        'mm_transactions',
+        'mm_category_overrides',
+        'mm_advisor_sessions',
+      ].forEach((key) => window.localStorage.removeItem(key));
+      window.localStorage.setItem('mm_data_version', 'v2_clean');
+    }
+  }
+
   // Collections state
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     if (!browserStorage) return initialBankAccounts;
@@ -251,6 +280,54 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     return initialTransactions;
   });
+
+  const clearAllData = useCallback(() => {
+    setBankAccounts([]);
+    setExpenses([]);
+    setHabitualExpenses([]);
+    setMedicalExpenses([]);
+    setStudents([]);
+    setEducationExpenses([]);
+    setLoans([]);
+    setInvestments([]);
+    setGoals([]);
+    setTransactions([]);
+    if (browserStorage) {
+      browserStorage.removeItem('mm_bank_accounts');
+      browserStorage.removeItem('mm_expenses');
+      browserStorage.removeItem('mm_habitual');
+      browserStorage.removeItem('mm_medical');
+      browserStorage.removeItem('mm_students');
+      browserStorage.removeItem('mm_education');
+      browserStorage.removeItem('mm_loans');
+      browserStorage.removeItem('mm_investments');
+      browserStorage.removeItem('mm_goals');
+      browserStorage.removeItem('mm_transactions');
+      browserStorage.removeItem('mm_category_overrides');
+      browserStorage.removeItem('mm_advisor_sessions');
+      browserStorage.removeItem('mm_sessions');
+    }
+
+    // Also wipe backend SQLite/Firestore ledger so all modules stay synchronized
+    fetch('/api/wipe', { method: 'POST' })
+      .then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('mm_ledger_updated'));
+        }
+      })
+      .catch(() => {});
+  }, [browserStorage]);
+
+  // Reset in-memory states whenever user logs out
+  useEffect(() => {
+    const handleLogout = () => {
+      clearAllData();
+    };
+    window.addEventListener('mm_logout', handleLogout);
+    return () => {
+      window.removeEventListener('mm_logout', handleLogout);
+    };
+  }, [clearAllData]);
 
   // Sync with backend API (/api/ingest) on load and on demand
   const syncWithBackend = useCallback(async () => {
@@ -829,37 +906,6 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ? Math.max(0, Math.round(((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100))
     : 0;
 
-  const clearAllData = () => {
-    setBankAccounts([]);
-    setExpenses([]);
-    setHabitualExpenses([]);
-    setMedicalExpenses([]);
-    setEducationExpenses([]);
-    setLoans([]);
-    setInvestments([]);
-    setGoals([]);
-    setTransactions([]);
-    if (browserStorage) {
-      browserStorage.removeItem('mm_bank_accounts');
-      browserStorage.removeItem('mm_expenses');
-      browserStorage.removeItem('mm_habitual');
-      browserStorage.removeItem('mm_medical');
-      browserStorage.removeItem('mm_education');
-      browserStorage.removeItem('mm_loans');
-      browserStorage.removeItem('mm_investments');
-      browserStorage.removeItem('mm_goals');
-      browserStorage.removeItem('mm_transactions');
-    }
-
-    // Also wipe backend SQLite/Firestore ledger so all modules stay synchronized
-    fetch('/api/wipe', { method: 'POST' })
-      .then(() => {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('mm_ledger_updated'));
-        }
-      })
-      .catch(() => {});
-  };
 
   const netWorth = (totalSavingsBalance + totalInvestmentValuation) - totalLoanPrincipal;
 
