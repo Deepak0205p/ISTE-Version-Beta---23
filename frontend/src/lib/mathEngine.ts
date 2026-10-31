@@ -401,8 +401,8 @@ export function computeVerdict(input: {
       shortfall_worst_case_paise: shortfallWorst,
       shortfall_median_paise: shortfallMedian,
       target_paise: target,
-      reason: `Only ${x} months of history - a forecast would be a guess. Add one more month or upload an older statement.`,
-      banner: "Cannot forecast: Need minimum 90 days history",
+      reason: `Only ${x} months of history - a forecast would be a guess. We need at least 3 months of transaction history to make a reliable affordability estimate.`,
+      banner: "INSUFFICIENT DATA: We need at least 3 months of transaction history to make a reliable affordability estimate.",
       months_of_data,
     };
   }

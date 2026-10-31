@@ -216,12 +216,12 @@ export default function AffordabilityDashboard() {
                     <div key={m.month} className="flex-1 text-center">
                       <div className="flex h-24 items-end justify-center gap-0.5">
                         <div
-                          className="bg-emerald-500/60 w-1/2 rounded-t"
+                          className="bg-[#16A579]/70 w-1/2 rounded-t"
                           style={{ height: `${Math.max(2, (m.income / maxTrend) * 100)}%` }}
                           title={`Income ₹${Math.round(m.income / 100).toLocaleString("en-IN")}`}
                         />
                         <div
-                          className="bg-red-500/60 w-1/2 rounded-t"
+                          className="bg-[#8F7D65]/70 w-1/2 rounded-t"
                           style={{ height: `${Math.max(2, (m.spend / maxTrend) * 100)}%` }}
                           title={`Spend ₹${Math.round(m.spend / 100).toLocaleString("en-IN")}`}
                         />
@@ -233,8 +233,8 @@ export default function AffordabilityDashboard() {
                   ))}
                 </div>
                 <p className="text-muted-foreground mt-2 text-[10px]">
-                  <span className="text-emerald-600 dark:text-emerald-400">▮</span> income ·{" "}
-                  <span className="text-red-600 dark:text-red-400">▮</span> spend
+                  <span className="text-[#16A579]">▮</span> income ·{" "}
+                  <span className="text-[#8F7D65]">▮</span> spend
                 </p>
               </CardContent>
             </Card>

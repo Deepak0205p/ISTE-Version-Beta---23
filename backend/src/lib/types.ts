@@ -44,7 +44,6 @@ export interface LedgerTxn {
   type: TxnType;
   flags: TxnFlags;
   txn_hash: string;
-  balance_after_paise?: number;
 }
 
 export type Verdict = "YES" | "TIGHT" | "NO" | "REFUSED";

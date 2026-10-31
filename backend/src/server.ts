@@ -18,11 +18,9 @@ import {
   wipeAll,
   insertTransactions,
   upsertAccount,
-  deleteTxn,
   listVerdicts,
   initRepository,
 } from "./lib/repository.js";
-import { txnHash } from "./lib/ledgerHygiene.js";
 import { parseStatementWithAi } from "./lib/geminiParser.js";
 
 const app = express();
@@ -319,7 +317,7 @@ app.post("/api/wipe", (_req, res) => {
 });
 
 // Helper to build full workspace snapshot
-function buildWorkspaceSnapshot(targetAmountInr: number = 80000) {
+function buildWorkspaceSnapshot() {
   const txns = allTransactions();
   const stats = ledgerStats();
 
@@ -376,7 +374,7 @@ function buildWorkspaceSnapshot(targetAmountInr: number = 80000) {
     };
   });
 
-  const targetPaise = Math.round(targetAmountInr * 100);
+  const targetPaise = 8000000;
   const committedPaise = recurring.reduce((sum, r) => sum + r.monthly_equivalent_paise, 0);
   const expectedIncomePaise = Math.round(txns.filter((t) => t.amount_paise > 0).reduce((acc, t) => acc + t.amount_paise, 0));
   const variableSpendPaise = Math.round(txns.filter((t) => t.amount_paise < 0).reduce((acc, t) => acc + Math.abs(t.amount_paise), 0));
@@ -494,249 +492,13 @@ app.all("/api/ps4", upload.array("files"), async (req, res) => {
       }
 
       if (body.action === "question") {
-        const amt = Number(body.amount_inr) || 80000;
-        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot(amt) });
+        return res.json({ ok: true, snapshot: buildWorkspaceSnapshot() });
       }
     }
 
     res.json({ ok: true, snapshot: buildWorkspaceSnapshot() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Error" });
-  }
-});
-
-// Manual transaction creation endpoint (Add Expense / Income from UI)
-app.post("/api/transactions", (req, res) => {
-  try {
-    const { amount, description, date, type, category, account_id } = req.body;
-    if (!amount || !description) {
-      return res.status(400).json({ ok: false, message: "Amount and description are required." });
-    }
-
-    const amountNum = Number(amount);
-    const amountPaise = type === "credit" ? Math.round(amountNum * 100) : -Math.round(Math.abs(amountNum) * 100);
-    const isoDate = date || new Date().toISOString().slice(0, 10);
-    const accId = account_id || "Primary_Account";
-    const hash = txnHash(accId, isoDate, amountPaise, null, description);
-
-    upsertAccount({ id: accId, bank: "Manual", label: accId.replace(/_/g, " ") });
-    const ins = insertTransactions([
-      {
-        account_id: accId,
-        date: isoDate,
-        amount_paise: amountPaise,
-        raw_narration: description,
-        clean_narration: description,
-        ref: null,
-        category: category || (amountPaise > 0 ? "salary" : "other"),
-        type: "normal",
-        flags: {},
-        txn_hash: hash,
-      },
-    ]);
-
-    runIngest();
-    res.json({ ok: true, inserted: ins.inserted, message: "Transaction recorded in ledger." });
-  } catch (err) {
-    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to save transaction." });
-  }
-});
-
-// Manual account creation endpoint
-app.post("/api/accounts", (req, res) => {
-  try {
-    const { id, bank, label, opening_balance } = req.body;
-    if (!bank || !label) {
-      return res.status(400).json({ ok: false, message: "Bank and label are required." });
-    }
-    const accId = id || `bank-${Date.now()}`;
-    upsertAccount({ id: accId, bank, label });
-
-    if (opening_balance && Number(opening_balance) > 0) {
-      const balancePaise = Math.round(Number(opening_balance) * 100);
-      const today = new Date().toISOString().slice(0, 10);
-      const desc = `Opening Balance - ${label}`;
-      const hash = txnHash(accId, today, balancePaise, null, desc);
-      insertTransactions([
-        {
-          account_id: accId,
-          date: today,
-          amount_paise: balancePaise,
-          raw_narration: desc,
-          clean_narration: desc,
-          ref: null,
-          category: "transfer",
-          type: "normal",
-          flags: {},
-          txn_hash: hash,
-        },
-      ]);
-    }
-
-    runIngest();
-    res.json({ ok: true, account_id: accId, message: "Account created and synced." });
-  } catch (err) {
-    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to create account." });
-  }
-});
-
-// Manual transaction delete endpoint
-app.delete("/api/transactions/:id", (req, res) => {
-  try {
-    const id = req.params.id;
-    const ok = deleteTxn(id);
-    if (ok) {
-      runIngest();
-      return res.json({ ok: true, message: `Transaction ${id} deleted.` });
-    }
-    res.status(404).json({ ok: false, message: "Transaction not found." });
-  } catch (err) {
-    res.status(500).json({ ok: false, message: err instanceof Error ? err.message : "Failed to delete transaction." });
-  }
-});
-
-// Advisor AI Chatbot Endpoint (Gemini 3.5 Flash Lite + Tavily Real-time Web Search)
-app.post("/api/advisor/chat", async (req, res) => {
-  try {
-    const { message, history, userData, enableWebSearch = true } = req.body;
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ ok: false, error: "Valid message is required" });
-    }
-
-    const tavilyKey = process.env.TAVILY_API_KEY || "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";
-    const geminiKey = process.env.GEMINI_API_KEY || "AQ.Ab8RN6J-sF1BtzwQ-AsK0lq1ET7uBX4JjTXQJGlkTjdoFAZxbw";
-    const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-
-    // 1. Intelligent Query Classifier: Decide automatically whether web search is required
-    let webSources: Array<{ title: string; url: string; snippet: string }> = [];
-    
-    // Explicit queries asking about personal finance, savings, or user ledger
-    const isPersonalFinanceQuery = /\b(my savings|my balance|my loan|my emi|my expense|my budget|my goal|my salary|how much did i spend|my account|my portfolio|i afford|can i buy|tell me about my|my cashflow)\b/i.test(message);
-
-    // Queries specifically seeking external market benchmarks, real-time rates, schemes, or public news
-    const isExternalMarketQuery = /\b(rbi|repo|scheme|schemes|tax slabs|80c|new tax regime|old tax regime|nps|ppf interest|epf rate|ssy rate|sukanya|cagr|sensex|nifty|gold price|silver price|fd rate|market news|budget 2025|budget 2026|latest interest rate|inflation in india|best mutual fund|current repo rate)\b/i.test(message);
-
-    // Only invoke Tavily search if the query is strictly seeking external market/statutory data
-    const shouldSearch = Boolean(tavilyKey && isExternalMarketQuery && !isPersonalFinanceQuery);
-
-    if (shouldSearch) {
-      try {
-        const tavRes = await fetch("https://api.tavily.com/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: tavilyKey,
-            query: message + " India finance",
-            search_depth: "basic",
-            max_results: 3,
-          }),
-        });
-        if (tavRes.ok) {
-          const tavData = (await tavRes.json()) as { results?: Array<{ title: string; url: string; content: string }> };
-          if (tavData.results && Array.isArray(tavData.results)) {
-            webSources = tavData.results.map(r => ({
-              title: r.title,
-              url: r.url,
-              snippet: r.content,
-            }));
-          }
-        }
-      } catch (searchErr) {
-        console.warn("[advisor] Tavily search failed, continuing without web results:", searchErr);
-      }
-    }
-
-    // 2. Format Grounded User Financial Profile
-    const profileSummary = userData
-      ? `USER'S PERSONAL FINANCIAL DATA (Ground truth from their connected accounts & ledger):
-- Name: ${userData.name || "User"}
-- Liquid Savings Balance: ₹${Number(userData.metrics?.totalSavingsBalance || 0).toLocaleString("en-IN")}
-- Monthly In-Hand Income: ₹${Number(userData.metrics?.monthlyIncome || 0).toLocaleString("en-IN")}
-- Monthly Expenses: ₹${Number(userData.metrics?.monthlyExpenses || 0).toLocaleString("en-IN")}
-- Active Loans (${userData.loans?.length || 0}): Total Principal: ₹${Number(userData.metrics?.totalLoanPrincipal || 0).toLocaleString("en-IN")}, Monthly EMI: ₹${Number(userData.metrics?.monthlyEmiCommitments || 0).toLocaleString("en-IN")}
-- Active Goals (${userData.goals?.length || 0}): ${userData.goals?.map((g: any) => `${g.title} (Target: ₹${Number(g.targetAmount).toLocaleString("en-IN")}, Saved: ₹${Number(g.currentAmount).toLocaleString("en-IN")})`).join("; ") || "None"}
-- Investments Portfolio (${userData.investments?.length || 0}): Valuation: ₹${Number(userData.metrics?.totalInvestmentValuation || 0).toLocaleString("en-IN")}, Invested: ₹${Number(userData.metrics?.totalInvestedPrincipal || 0).toLocaleString("en-IN")}
-- Bank Accounts: ${userData.bankAccounts?.map((b: any) => `${b.bankName} (${b.accountType}): ₹${Number(b.balance || 0).toLocaleString("en-IN")}`).join(", ") || "None"}
-- Top Spending Categories: ${userData.topCategories || "Not enough data"}`
-      : "No local user profile provided.";
-
-    const webContext = webSources.length > 0
-      ? `LIVE WEB SEARCH RESULTS (Retrieved via Tavily API in real-time):\n` +
-        webSources.map((s, idx) => `[Source ${idx + 1}]: ${s.title} (${s.url})\n${s.snippet}`).join("\n\n")
-      : "No live web search needed or retrieved.";
-
-    // 3. Compose Prompt for Gemini 3.5 Flash Lite
-    const systemPrompt = `You are "Money Matters AI", an expert personal financial advisor and wealth coach.
-You have direct access to:
-1. The user's verified personal financial records (balances, incomes, EMIs, investments, goals).
-2. Live Internet Search data (via Tavily search).
-
-STRICT RESPONSE RULES:
-- ALWAYS respond strictly in fluent, professional ENGLISH.
-- Answer POINT-TO-POINT with ZERO fluff, filler intros, or conversational preamble. Get straight to the answer.
-- Structure responses with structured markdown bullet points, bold key figures (₹ INR), and distinct headers.
-- Ground answers on the user's exact financial numbers whenever answering affordability, savings, or investment questions.
-- If web sources provide live market data (interest rates, repo rates, tax laws), cite them directly with precise figures.
-
-${profileSummary}
-
-${webContext}`;
-
-    const conversationParts: Array<{ role: string; parts: Array<{ text: string }> }> = [];
-
-    // Prior chat messages
-    if (Array.isArray(history)) {
-      for (const h of history.slice(-6)) {
-        conversationParts.push({
-          role: h.sender === "USER" ? "user" : "model",
-          parts: [{ text: h.text }],
-        });
-      }
-    }
-
-    // Latest user message
-    conversationParts.push({
-      role: "user",
-      parts: [{ text: message }],
-    });
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
-    const gemRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents: conversationParts,
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 1000,
-        },
-      }),
-    });
-
-    if (!gemRes.ok) {
-      const errText = await gemRes.text();
-      console.error("[advisor] Gemini API error:", errText);
-      throw new Error(`Gemini generation failed: ${gemRes.statusText}`);
-    }
-
-    const gemData = await gemRes.json() as any;
-    const aiText = gemData.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to generate a response. Please try again.";
-
-    res.json({
-      ok: true,
-      reply: aiText,
-      sources: webSources,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("[advisor] Chat route failed:", err);
-    res.status(500).json({
-      ok: false,
-      error: err instanceof Error ? err.message : "Chat processing failed",
-    });
   }
 });
 

@@ -124,12 +124,9 @@ export function evaluatePreFlightSufficiency(
   const latest = sortedDates[sortedDates.length - 1];
   const historyDays = Math.round((latest - earliest) / (1000 * 60 * 60 * 24));
 
-  const hasVerifiedIncome = transactions.some((t) => {
-    const isCredit = String(t.type).toUpperCase() === 'CREDIT';
-    const desc = (t.description || '').toLowerCase();
-    const hasSalaryKeyword = /salary|payroll|credit|deposit|income|interest|stipend|freelance|earnings|accr|neft|imps|transfer/i.test(desc);
-    return isCredit && !t.isInternalTransfer && (t.amount >= 1000 || hasSalaryKeyword);
-  }) || transactions.some(t => String(t.type).toUpperCase() === 'CREDIT' && !t.isInternalTransfer && t.amount > 0);
+  const hasVerifiedIncome = transactions.some(
+    t => t.type === 'CREDIT' && !t.isInternalTransfer && t.amount >= 20000
+  );
 
   // Check 15-day gap in statement records
   let hasDateGapWarning = false;
@@ -148,9 +145,9 @@ export function evaluatePreFlightSufficiency(
   let canForecast = true;
   let refusalReason: string | undefined = undefined;
 
-  if (historyDays < 60) {
+  if (historyDays < 85) {
     canForecast = false;
-    refusalReason = `Cannot forecast: Need minimum 60 days history (Detected ${historyDays} days).`;
+    refusalReason = `Cannot forecast: Need minimum 90 days history (Detected only ${historyDays} days).`;
   } else if (!hasVerifiedIncome) {
     canForecast = false;
     refusalReason = 'Cannot forecast: No verified recurring salary or primary inflow detected in statement.';

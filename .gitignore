@@ -44,15 +44,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# python
-__pycache__/
-*.py[cod]
-*$py.class
-
 # local SQLite database & uploads
 /data/
-.data/
-backend/.data/
 *.db
 *.db-shm
 *.db-wal
@@ -61,4 +54,3 @@ backend/uploads/*
 
 backend/serviceAccountKey.json
 serviceAccountKey.json
-*serviceAccount*.json

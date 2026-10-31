@@ -47,10 +47,10 @@ type Answer = {
 };
 
 const VERDICT_STYLES: Record<Verdict, string> = {
-  YES: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  TIGHT: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  NO: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400",
-  REFUSED: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+  YES: "border-[#16A579]/40 bg-[#E7F5EF] dark:bg-[#16A579]/15 text-[#16A579] font-medium",
+  TIGHT: "border-[#C98A32]/40 bg-[#FBF1DD] dark:bg-[#C98A32]/15 text-[#C98A32] font-medium",
+  NO: "border-[#D95C52]/40 bg-[#FBE9E7] dark:bg-[#D95C52]/15 text-[#D95C52] font-medium",
+  REFUSED: "border-[#8A847B]/40 bg-[#EFEEE9] dark:bg-[#8A847B]/15 text-[#8A847B] font-medium",
 };
 
 export function VerdictCard({
@@ -260,13 +260,14 @@ export function VerdictCard({
 
         {answer && !pending && (
           <div className="space-y-4">
-            {/* --- REFUSED banner ---------------------------------------- */}
+            {/* --- INSUFFICIENT DATA banner (Gray #8A847B) ------------------- */}
             {answer.verdict === "REFUSED" && answer.banner && (
               <div
-                className="border-sky-500/50 bg-sky-500/10 rounded-lg border px-3 py-2 text-sm font-semibold"
+                className="border-[#8A847B]/40 bg-[#EFEEE9] dark:bg-[#8A847B]/15 text-[#8A847B] rounded-lg border px-3 py-2 text-sm font-semibold flex items-center gap-2"
                 role="alert"
               >
-                {answer.banner}
+                <span>⚪</span>
+                <span>{answer.banner}</span>
               </div>
             )}
 

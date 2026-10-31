@@ -4,8 +4,6 @@
  */
 import { normalizeNarration, txnHash } from "./ledgerHygiene.js";
 import type { LedgerTxn } from "./types.js";
-import { ingestCsvText } from "./pipeline.js";
-import { parseGenericCsvStatement } from "./universalParser.js";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -72,7 +70,6 @@ async function callGeminiForStatement(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(6000),
   });
 
   if (!response.ok) {
@@ -153,36 +150,7 @@ export async function parseStatementWithAi(
     ];
   }
 
-  let rawTxns: ExtractedAiTxn[] = [];
-  try {
-    rawTxns = await callGeminiForStatement(parts);
-  } catch (aiErr) {
-    console.warn(`[geminiParser] AI call failed (${(aiErr as Error)?.message || aiErr}), applying deterministic fallback...`);
-    // Fallback: If CSV, parse using deterministic bank adapter pipeline or universal CSV parser
-    if (isCsv) {
-      const textContent = buffer.toString("utf8");
-      const outcome = ingestCsvText(textContent, accountId);
-      if (outcome.ok && outcome.rows.length > 0) {
-        return {
-          ok: true,
-          rows: outcome.rows,
-          totalFound: outcome.rows.length,
-          message: "Parsed via deterministic fallback engine",
-        };
-      }
-      // If header didn't match known bank adapters, parse with universal CSV parser
-      const genericRows = parseGenericCsvStatement(textContent, accountId);
-      if (genericRows.length > 0) {
-        return {
-          ok: true,
-          rows: genericRows,
-          totalFound: genericRows.length,
-          message: "Parsed via universal fallback CSV parser",
-        };
-      }
-    }
-    throw aiErr;
-  }
+  const rawTxns = await callGeminiForStatement(parts);
 
   const rows: LedgerTxn[] = [];
 

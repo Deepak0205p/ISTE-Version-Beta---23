@@ -4,15 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useFinancial } from "@/context/FinancialContext";
 import { Sidebar } from "@/components/Sidebar";
 
-export function AppShell({
-  children,
-  fullWidth = false,
-  noPadding = false,
-}: {
-  children: React.ReactNode;
-  fullWidth?: boolean;
-  noPadding?: boolean;
-}) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const { isDarkMode } = useFinancial();
   const [mounted, setMounted] = useState(false);
 
@@ -22,9 +14,9 @@ export function AppShell({
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex items-center justify-center font-mono text-sm">
+      <div className="min-h-screen bg-[#121008] text-[#F7F5F1] flex items-center justify-center font-mono text-sm">
         <div className="flex items-center gap-3">
-          <div className="w-4 h-4 rounded-full border-2 border-[#16A579] border-t-transparent animate-spin" />
+          <div className="w-4 h-4 rounded-full border-2 border-[#8F7D65] border-t-transparent animate-spin" />
           <span>Loading Money Matters...</span>
         </div>
       </div>
@@ -33,18 +25,15 @@ export function AppShell({
 
   return (
     <div
-      className={`min-h-screen flex transition-colors duration-200 ${isDarkMode
-          ? "dark bg-[#0F172A] text-[#F8FAFC]"
-          : "light bg-[#F8FAFC] text-[#0F172A]"
-        }`}
+      className={`min-h-screen flex transition-colors duration-200 ${
+        isDarkMode
+          ? "dark bg-[#121008] text-[#F7F5F1]"
+          : "light bg-[#F8F7F4] text-[#29241E]"
+      }`}
     >
       <Sidebar />
-      <main
-        className={`flex-1 min-w-0 h-screen overflow-y-auto ${
-          noPadding ? "p-0" : fullWidth ? "p-3 sm:p-4" : "px-4 sm:px-8 py-6"
-        }`}
-      >
-        <div className={fullWidth ? "w-full h-full" : "max-w-7xl mx-auto"}>
+      <main className="flex-1 min-w-0 h-screen overflow-y-auto px-4 sm:px-8 py-6">
+        <div className="max-w-7xl mx-auto">
           {children}
         </div>
       </main>

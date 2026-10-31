@@ -84,18 +84,19 @@ export function calculateAffordabilityReceipt(input: AffordabilityInput): Afford
   const p50ScenarioFloor = Math.round(projectedCashFloor);
   const p90ScenarioFloor = Math.round(projectedCashFloor + (expectedMonthlyIncome * 0.05));
 
-  // Determine Verdict
+  // Determine Verdict using Money Matters Semantic Color System:
+  // Green #16A579 (Confidence/Comfortable), Amber #C98A32 (Caution/Tight), Red #D95C52 (Financial Risk)
   let verdict: AffordabilityReceipt['verdict'] = 'AFFORDABLE';
-  let verdictColor = '#22C55E';
+  let verdictColor = '#16A579';
   let verdictSummary = `Safe to proceed. Your minimum cash floor remains at ${formatINR(projectedCashFloor)}, comfortably above your ${formatINR(safetyBuffer)} safety threshold.`;
 
   if (projectedCashFloor < minimumAverageBalanceRequirement) {
     verdict = 'NOT_AFFORDABLE';
-    verdictColor = '#EF4444';
+    verdictColor = '#D95C52';
     verdictSummary = `Purchase triggers an overdraft risk. Your daily cash trajectory dips to ${formatINR(projectedCashFloor)} before your next income arrives.`;
   } else if (projectedCashFloor < safetyBuffer) {
     verdict = 'TIGHT';
-    verdictColor = '#F59E0B';
+    verdictColor = '#C98A32';
     verdictSummary = `Caution advised. Cash floor drops to ${formatINR(projectedCashFloor)}, which erodes your safety buffer (${formatINR(safetyBuffer)}) although above MAB.`;
   }
 

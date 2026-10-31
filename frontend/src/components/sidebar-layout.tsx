@@ -25,7 +25,7 @@ import { useAuth } from "@/lib/authContext";
 import { AuthModal } from "@/components/auth-modal";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }>; badge?: string }[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/money-management", label: "Money Management", icon: Wallet },
   { href: "/banking", label: "Banking & Statements", icon: Landmark },
@@ -139,21 +139,21 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition-all text-left relative group ${
                   isActive
                     ? isDark
-                      ? "bg-gradient-to-r from-[#8D7A62]/25 to-transparent text-[#D4AF37] border-l-4 border-[#8D7A62]"
-                      : "bg-[#F3EDE2] text-[#8D7A62] border-l-4 border-[#8D7A62] font-semibold"
+                      ? "bg-gradient-to-r from-[#8F7D65]/25 to-transparent text-[#C9A87E] border-l-4 border-[#8F7D65]"
+                      : "bg-[#F2ECE3] text-[#6F5D48] border-l-4 border-[#8F7D65] font-semibold"
                     : isDark
-                    ? "text-[#A79A8A] hover:text-[#ECEAE6] hover:bg-[#241F17]/50"
-                    : "text-[#7A6F62] hover:text-[#1E1B18] hover:bg-[#F5EFE4]"
+                    ? "text-[#9A9186] hover:text-[#F7F5F1] hover:bg-[#241F17]/50"
+                    : "text-[#746B60] hover:text-[#29241E] hover:bg-[#F1EEE8]"
                 }`}
               >
-                <div className={isActive ? "text-[#8D7A62]" : isDark ? "text-[#A79A8A] group-hover:text-white" : "text-[#7A6F62] group-hover:text-black"}>
+                <div className={isActive ? (isDark ? "text-[#C9A87E]" : "text-[#6F5D48]") : isDark ? "text-[#9A9186] group-hover:text-white" : "text-[#746B60] group-hover:text-[#29241E]"}>
                   <Icon size={20} />
                 </div>
                 {!collapsed && (
                   <>
                     <span className="flex-1 truncate">{item.label}</span>
                     {item.badge && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${isDark ? "bg-[#241F17] text-[#8D7A62] border-[#3A3226]" : "bg-[#EDE5D5] text-[#8D7A62] border-[#D6CBB9]"}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${isDark ? "bg-[#241F17] text-[#8F7D65] border-[#3A3226]" : "bg-[#F2ECE3] text-[#6F5D48] border-[#E4DED4]"}`}>
                         {item.badge}
                       </span>
                     )}

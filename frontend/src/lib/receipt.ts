@@ -15,12 +15,15 @@ import type {
   Verdict,
 } from "@/lib/types";
 
-/** Display names for verdicts (the DB keeps the frozen YES/TIGHT/NO/REFUSED). */
+/** Display names for verdicts aligned with Money Matters Color Psychology (4 states). */
 export const VERDICT_DISPLAY: Record<Verdict | string, string> = {
-  YES: "AFFORDABLE",
+  YES: "COMFORTABLE",
+  AFFORDABLE: "COMFORTABLE",
   TIGHT: "TIGHT",
   NO: "NOT AFFORDABLE",
-  REFUSED: "CANNOT FORECAST",
+  NOT_AFFORDABLE: "NOT AFFORDABLE",
+  REFUSED: "INSUFFICIENT DATA",
+  CANNOT_FORECAST: "INSUFFICIENT DATA",
 };
 
 /** One structured line of the 6-line receipt. */

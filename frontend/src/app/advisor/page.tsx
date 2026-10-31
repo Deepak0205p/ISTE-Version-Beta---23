@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default function AdvisorPage() {
   return (
-    <AppShell fullWidth noPadding>
+    <AppShell>
       <AdvisorModule />
     </AppShell>
   );

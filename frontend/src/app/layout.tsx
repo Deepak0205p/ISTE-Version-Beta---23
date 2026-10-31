@@ -27,9 +27,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="light" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased bg-[#121008] text-[#ECEAE6]`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased bg-[#F8F7F4] text-[#29241E]`}
       >
         <AuthProvider>
           <FinancialProvider>{children}</FinancialProvider>

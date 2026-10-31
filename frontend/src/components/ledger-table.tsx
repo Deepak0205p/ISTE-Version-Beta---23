@@ -224,27 +224,27 @@ export function LedgerTable({
         <div className="flex flex-wrap justify-end gap-1.5">
           <Badge variant="secondary">{txns.length} rows</Badge>
           {!!counts?.dup_p && (
-            <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">
+            <Badge variant="outline" className="border-[#C98A32]/40 text-[#C98A32] bg-[#FBF1DD] dark:bg-[#C98A32]/15">
               {counts.dup_p} possible dupes
             </Badge>
           )}
           {!!counts?.transfers && (
-            <Badge variant="outline" className="border-sky-500/40 text-sky-600 dark:text-sky-400">
+            <Badge variant="outline" className="border-[#4F7CAC]/40 text-[#4F7CAC] bg-[#EAF1F7] dark:bg-[#4F7CAC]/15">
               {counts.transfers} transfers
             </Badge>
           )}
           {!!counts?.card_bills && (
-            <Badge variant="outline" className="border-sky-500/40 text-sky-600 dark:text-sky-400">
+            <Badge variant="outline" className="border-[#4F7CAC]/40 text-[#4F7CAC] bg-[#EAF1F7] dark:bg-[#4F7CAC]/15">
               {counts.card_bills} card bills
             </Badge>
           )}
           {!!counts?.netted && (
-            <Badge variant="outline" className="border-violet-500/40 text-violet-600 dark:text-violet-400">
+            <Badge variant="outline" className="border-[#8A847B]/40 text-[#8A847B] bg-[#EFEEE9] dark:bg-[#8A847B]/15">
               {counts.netted} netted
             </Badge>
           )}
           {!!counts?.anomalies && (
-            <Badge variant="outline" className="border-red-500/40 text-red-600 dark:text-red-400">
+            <Badge variant="outline" className="border-[#D95C52]/40 text-[#D95C52] bg-[#FBE9E7] dark:bg-[#D95C52]/15">
               {counts.anomalies} anomalies
             </Badge>
           )}
@@ -323,7 +323,7 @@ export function LedgerTable({
                   </TableCell>
                   <TableCell
                     className={`text-right font-mono text-sm tabular-nums ${
-                      row.amount_paise < 0 ? "text-foreground" : "text-emerald-600 dark:text-emerald-400"
+                      row.amount_paise < 0 ? "text-[#746B60] dark:text-[#9A9186]" : "text-[#16A579] font-semibold"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -453,7 +453,7 @@ function FlagBadges({
       <button key="d" type="button" onClick={onAskDuplicate} disabled={busy}>
         <Badge
           variant="outline"
-          className="border-amber-500/40 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
+          className="border-[#C98A32]/40 text-[#C98A32] bg-[#FBF1DD] hover:bg-[#FBF1DD]/80 dark:bg-[#C98A32]/15"
         >
           <AlertTriangle className="mr-1 size-3" />
           possible dup · decide
@@ -467,7 +467,7 @@ function FlagBadges({
         <button key="a" type="button" onClick={onMarkReal} disabled={busy} title={row.flags.anomaly_reasons?.join(" · ")}>
           <Badge
             variant="outline"
-            className="border-red-500/40 text-red-600 hover:bg-red-500/20 dark:text-red-400"
+            className="border-[#D95C52]/40 text-[#D95C52] bg-[#FBE9E7] hover:bg-[#FBE9E7]/80 dark:bg-[#D95C52]/15"
           >
             <AlertTriangle className="mr-1 size-3" />
             {row.flags.anomaly_reasons?.[0] ?? "anomaly"} · mark real
@@ -478,7 +478,7 @@ function FlagBadges({
   }
   if (row.flags.user_kept) {
     badges.push(
-      <Badge key="k" variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+      <Badge key="k" variant="outline" className="border-[#16A579]/40 text-[#16A579] bg-[#E7F5EF] dark:bg-[#16A579]/15">
         <Check className="mr-1 size-3" />
         real (your call)
       </Badge>,
