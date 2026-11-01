@@ -355,16 +355,27 @@ export function GmailStatementSync() {
               Triggers Gmail query: <code className="text-[#D9C0A0]">from:(*@hdfcbank.com OR *@sbicard.com) has:attachment</code>
             </span>
             <button
-              onClick={handleSyncStatements}
+              onClick={status?.connected ? handleSyncStatements : handleConnectGmail}
               disabled={isSyncing}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${
                 isSyncing
                   ? "bg-[#241F17] text-[#A79A8A] cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                  : status?.connected
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30"
+                  : "bg-[#C9A87E] hover:bg-[#D9C0A0] text-[#121008] shadow-lg shadow-[#C9A87E]/20"
               }`}
             >
-              <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
-              <span>{isSyncing ? "Ingesting Statements..." : "Sync Bank Statements Now"}</span>
+              {status?.connected ? (
+                <>
+                  <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
+                  <span>{isSyncing ? "Ingesting Statements..." : "Sync Bank Statements Now"}</span>
+                </>
+              ) : (
+                <>
+                  <Mail size={14} />
+                  <span>Step 1: Connect Gmail Account First</span>
+                </>
+              )}
             </button>
           </div>
         </div>

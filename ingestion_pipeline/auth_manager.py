@@ -1,4 +1,6 @@
 import os
+import json
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -21,26 +23,93 @@ from google.auth.exceptions import RefreshError
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build, Resource
 
+logger = logging.getLogger("AuthManager")
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-def get_firestore_client() -> firestore.firestore.Client:
+LOCAL_TOKEN_FILE = Path(__file__).parent.parent / "backend" / "data" / "gmail_tokens.json"
+
+def get_firestore_client() -> Optional[firestore.firestore.Client]:
     """
-    Initializes and returns the shared Cloud Firestore client.
-    Reads credentials from FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH,
-    falling back to FIREBASE_PROJECT_ID configuration.
+    Initializes and returns Cloud Firestore client if service account credentials exist.
+    Never throws ADC DefaultCredentialsError.
     """
-    if not firebase_admin._apps:
+    try:
         service_account_path = (
             os.environ.get("FIREBASE_SERVICE_ACCOUNT")
             or os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
         )
         project_id = os.environ.get("FIREBASE_PROJECT_ID") or ""
-        if service_account_path and os.path.exists(service_account_path):
-            cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred, {"projectId": project_id})
-        else:
-            firebase_admin.initialize_app(options={"projectId": project_id})
-    return firestore.client()
+
+        if not firebase_admin._apps:
+            if service_account_path and os.path.exists(service_account_path):
+                cred = credentials.Certificate(service_account_path)
+                firebase_admin.initialize_app(cred, {"projectId": project_id})
+                return firestore.client()
+            else:
+                # Do not trigger ADC throw in local dev
+                return None
+        return firestore.client()
+    except Exception as e:
+        logger.debug(f"Firestore Admin not available: {e}")
+        return None
+
+
+def save_user_tokens(user_id: str, token_data: Dict[str, Any]) -> None:
+    """
+    Persists tokens locally in backend/data/gmail_tokens.json and mirrors to Firestore if available.
+    """
+    # 1. Local disk persistence
+    try:
+        LOCAL_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tokens_map = {}
+        if LOCAL_TOKEN_FILE.exists():
+            try:
+                with open(LOCAL_TOKEN_FILE, "r", encoding="utf-8") as f:
+                    tokens_map = json.load(f)
+            except Exception:
+                tokens_map = {}
+        tokens_map[user_id] = token_data
+        with open(LOCAL_TOKEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(tokens_map, f, indent=2)
+    except Exception as le:
+        logger.warning(f"Failed to write local token file: {le}")
+
+    # 2. Firestore persistence
+    try:
+        db = get_firestore_client()
+        if db:
+            token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
+            token_ref.set(token_data, merge=True)
+    except Exception as fe:
+        logger.warning(f"Could not persist tokens to Firestore (fallback to local): {fe}")
+
+
+def load_user_tokens(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves stored tokens from local storage or Firestore.
+    """
+    # 1. Local file first
+    if LOCAL_TOKEN_FILE.exists():
+        try:
+            with open(LOCAL_TOKEN_FILE, "r", encoding="utf-8") as f:
+                tokens_map = json.load(f)
+                if user_id in tokens_map:
+                    return tokens_map[user_id]
+        except Exception:
+            pass
+
+    # 2. Firestore fallback
+    try:
+        db = get_firestore_client()
+        if db:
+            token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
+            snap = token_ref.get()
+            if snap.exists:
+                return snap.to_dict()
+    except Exception:
+        pass
+
+    return None
 
 
 class OAuthConfigurationError(Exception):
@@ -115,7 +184,7 @@ def generate_authorization_url(user_id: str) -> str:
 def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
     """
     Exchanges authorization code for credentials and securely persists
-    them in Firestore under users/{userId}/tokens/gmail.
+    them under users/{userId}/tokens/gmail and local storage.
     """
     if not code:
         raise ValueError("Authorization code is missing from callback.")
@@ -140,9 +209,7 @@ def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
         "updatedAt": datetime.utcnow().isoformat()
     }
 
-    db = get_firestore_client()
-    token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
-    token_ref.set(token_data, merge=True)
+    save_user_tokens(user_id, token_data)
 
     return {
         "success": True,
@@ -153,27 +220,21 @@ def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
 
 def get_user_gmail_service(user_id: str) -> Resource:
     """
-    Fetches the user's stored refresh token from Firestore, refreshes it,
+    Fetches the user's stored refresh token, refreshes it,
     and returns an initialized Google Gmail API service resource.
     """
     if not user_id:
         raise ValueError("userId is required to fetch Gmail credentials.")
 
-    db = get_firestore_client()
-    token_ref = db.collection("users").document(user_id).collection("tokens").document("gmail")
-    snap = token_ref.get()
+    token_data = load_user_tokens(user_id)
 
-    if not snap.exists:
+    if not token_data or not token_data.get("refresh_token"):
         raise TokenNotFoundError(f"No Gmail authorization tokens found for user '{user_id}'.")
 
-    data = snap.to_dict() or {}
-    refresh_token = data.get("refresh_token")
-    client_id = data.get("client_id") or os.environ.get("GOOGLE_CLIENT_ID")
-    client_secret = data.get("client_secret") or os.environ.get("GOOGLE_CLIENT_SECRET")
-    token_uri = data.get("token_uri") or "https://oauth2.googleapis.com/token"
-
-    if not refresh_token:
-        raise TokenNotFoundError(f"Stored token document for '{user_id}' does not contain a refresh_token.")
+    refresh_token = token_data.get("refresh_token")
+    client_id = token_data.get("client_id") or os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = token_data.get("client_secret") or os.environ.get("GOOGLE_CLIENT_SECRET")
+    token_uri = token_data.get("token_uri") or "https://oauth2.googleapis.com/token"
 
     creds = Credentials(
         token=None,

@@ -25,6 +25,7 @@ from .auth_manager import (
     generate_authorization_url,
     handle_oauth_callback,
     get_user_gmail_service,
+    load_user_tokens,
     TokenNotFoundError,
     TokenRevokedOrInvalidError,
     OAuthConfigurationError
@@ -78,33 +79,26 @@ def root():
 @app.get("/auth/google/status")
 def get_google_auth_status(userId: str = Query(..., description="Unique User identifier")):
     """
-    Checks if Google OAuth credentials exist in .env and whether this user has an active Gmail token in Firestore.
+    Checks if Google OAuth credentials exist in .env and whether this user has an active Gmail token.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
     is_configured = bool(client_id and client_secret)
 
     connected = False
-    error_msg = None
-
     if is_configured:
         try:
-            get_user_gmail_service(userId)
-            connected = True
-        except TokenNotFoundError:
+            tokens = load_user_tokens(userId)
+            connected = bool(tokens and tokens.get("refresh_token"))
+        except Exception:
             connected = False
-        except Exception as e:
-            connected = False
-            error_msg = str(e)
-    else:
-        error_msg = "GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set in backend/.env"
 
     return {
         "success": True,
         "configured": is_configured,
         "connected": connected,
         "userId": userId,
-        "error": error_msg
+        "error": None if is_configured else "GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set in backend/.env"
     }
 
 
@@ -155,7 +149,7 @@ def google_auth_callback(
 ):
     """
     Step 2: Receives code and state (userId) from Google OAuth consent screen,
-    exchanges code for credentials, persists tokens to Firestore, and redirects to frontend.
+    exchanges code for credentials, persists tokens, and redirects to frontend.
     """
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
@@ -219,7 +213,7 @@ def sync_statements_for_user(
 ):
     """
     Step 3: Ingestion Trigger Endpoint
-    - Fetches user's stored refresh token from Firestore.
+    - Fetches user's stored refresh token.
     - Automatically refreshes credentials to initialize Google Gmail client.
     - Runs Gmail statement search & attachment retrieval into memory.
     - Decrypts PDF strictly in-memory using dynamic password derivations based on UserProfile.
@@ -246,7 +240,7 @@ def sync_statements_for_user(
             if isinstance(auth_err, TokenNotFoundError):
                 raise HTTPException(
                     status_code=401,
-                    detail=f"Gmail account not connected for '{userId}'. Please initiate OAuth via /auth/google/url?userId={userId}"
+                    detail=f"Gmail account not connected for '{userId}'. Please click 'Connect with Google Gmail' first."
                 )
             raise HTTPException(
                 status_code=401,
@@ -266,7 +260,6 @@ def sync_statements_for_user(
         if gmail_service:
             statements = pipeline.run_gmail_ingestion(user_id=userId)
         else:
-            # Simulation / Demo fallback
             statements = []
 
         # Bridge transactions to local ledger
