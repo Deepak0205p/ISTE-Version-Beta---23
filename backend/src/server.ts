@@ -595,6 +595,187 @@ app.delete("/api/transactions/:id", (req, res) => {
   }
 });
 
+// Dedicated AI Purchase Affordability Evaluation Endpoint
+app.post("/api/affordability/ai-evaluate", async (req, res) => {
+  try {
+    const {
+      productName = "Discretionary Item",
+      purchaseAmount = 0,
+      category = "Shopping & Misc",
+      paymentType = "lump_sum",
+      accountData = {},
+      globalMetrics = {},
+    } = req.body;
+
+    const geminiKey = process.env.GEMINI_API_KEY || "";
+    const geminiModel = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+    const candidateModels = [
+      geminiModel,
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-3.8-flash",
+    ].filter(Boolean) as string[];
+
+    const amountNum = Math.max(0, Number(purchaseAmount) || 0);
+    const balance = Math.max(0, Number(accountData.currentBalance) || 0);
+    const monthlyInflow = Math.max(0, Number(accountData.monthlyInflow) || 0);
+    const monthlyOutflow = Math.max(0, Number(accountData.monthlyOutflow) || 0);
+    const accountName = accountData.accountName || "Selected Account";
+    const monthlyEmi = Number(globalMetrics.totalMonthlyEmiCommitments) || 0;
+    const netWorth = Number(globalMetrics.consolidatedNetWorth) || 0;
+
+    // Calculate baseline figures
+    const postPurchaseBalance = balance - amountNum;
+    const monthlySurplus = monthlyInflow - monthlyOutflow;
+    const emergencyRunwayMonths = monthlyOutflow > 0 ? (postPurchaseBalance / monthlyOutflow).toFixed(1) : "3.0";
+    const drainRatio = balance > 0 ? Math.round((amountNum / balance) * 100) : 100;
+
+    const prompt = `You are a certified Financial Risk Analyst & Fiduciary Affordability Auditor.
+Analyze the following purchase request against the user's selected bank account history and overall balance sheet:
+
+PURCHASE DETAILS:
+- Product/Service: ${productName}
+- Purchase Price: ₹${amountNum.toLocaleString("en-IN")}
+- Target Category: ${category}
+- Procurement Mode: ${paymentType === "lump_sum" ? "Outright One-time Payment" : paymentType}
+
+SELECTED BANK ACCOUNT (${accountName}):
+- Current Verified Liquid Balance: ₹${balance.toLocaleString("en-IN")}
+- Typical Monthly Inflow Credits: ₹${monthlyInflow.toLocaleString("en-IN")}
+- Typical Monthly Outflow Debits: ₹${monthlyOutflow.toLocaleString("en-IN")}
+- Monthly Operating Surplus: ₹${monthlySurplus.toLocaleString("en-IN")}
+- Post-Purchase Account Balance: ₹${postPurchaseBalance.toLocaleString("en-IN")}
+- Account Drain Ratio: ${drainRatio}% of liquid capital in this account
+- Post-Purchase Emergency Runway: ${emergencyRunwayMonths} months
+
+OVERALL FINANCIAL CONTEXT:
+- Consolidated Net Worth: ₹${netWorth.toLocaleString("en-IN")}
+- Total Monthly EMI Debt Servicing: ₹${monthlyEmi.toLocaleString("en-IN")}
+
+FIDUCIARY RULES OF VERDICT:
+1. "YES" (Affordable): If the selected account retains at least 3 months of emergency expenses OR the monthly surplus exceeds the purchase cost, without creating a cash deficit or risking scheduled EMIs.
+2. "TIGHT" (Stretch / Proceed with Caution): If the purchase consumes >40% of the account's balance or drops emergency runway between 1 to 2.5 months, or leaves thin margin for unplanned expenses.
+3. "NO" (Unsafe / Not Recommended): If the purchase exceeds liquid balance, drops runway below 1 month, creates an operating cash deficit, or compromises debt servicing.
+
+STRICT INSTRUCTIONS:
+- Do NOT output generic conversational filler.
+- Be concise, direct, point-to-point, and factual.
+- Return ONLY a valid JSON object matching the exact schema below.
+
+JSON RESPONSE SCHEMA:
+{
+  "verdict": "YES" | "TIGHT" | "NO",
+  "verdictHeadline": "Short executive summary under 10 words",
+  "confidenceScore": 85 to 99,
+  "netRunwayMonthsAfterPurchase": number,
+  "accountDrainRatio": number,
+  "howAndWhy": [
+    "Specific factual point 1 explaining how funds are sourced and why it is safe",
+    "Specific factual point 2 on runway and monthly surplus protection"
+  ],
+  "whyAndRisks": [
+    "Specific factual risk point 1 explaining the deficit, balance strain, or runway drop",
+    "Specific factual risk point 2 explaining which obligations or buffer are endangered"
+  ],
+  "categoryImpactSummary": "One crisp sentence explaining the impact on the selected category's allocation",
+  "recommendedAction": "One concise fiduciary advice sentence on procurement timing or payment method"
+}`;
+
+    let aiResult: any = null;
+
+    if (geminiKey) {
+      for (const modelToTry of candidateModels) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${geminiKey}`;
+          const gemRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 800,
+                responseMimeType: "application/json",
+              },
+            }),
+          });
+
+          if (gemRes.ok) {
+            const data = await gemRes.json() as any;
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              aiResult = JSON.parse(text);
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`[affordability] Model ${modelToTry} attempt failed:`, e);
+        }
+      }
+    }
+
+    // High-quality deterministic fallback if AI key not configured or fails
+    if (!aiResult) {
+      const isAffordable = balance >= amountNum && (postPurchaseBalance >= monthlyOutflow * 2 || monthlySurplus >= amountNum);
+      const isTight = !isAffordable && balance >= amountNum;
+
+      aiResult = {
+        verdict: isAffordable ? "YES" : isTight ? "TIGHT" : "NO",
+        verdictHeadline: isAffordable
+          ? "Comfortably Affordable — Buffer Fully Preserved"
+          : isTight
+          ? "Cashflow Stretch — Significant Cushion Reduction"
+          : "Not Recommended — High Solvency Deficit Risk",
+        confidenceScore: 92,
+        netRunwayMonthsAfterPurchase: monthlyOutflow > 0 ? Number((postPurchaseBalance / monthlyOutflow).toFixed(1)) : 3,
+        accountDrainRatio: drainRatio,
+        howAndWhy: isAffordable
+          ? [
+              `Your selected account (${accountName}) holds ₹${balance.toLocaleString("en-IN")}, leaving ₹${Math.max(0, postPurchaseBalance).toLocaleString("en-IN")} after paying ₹${amountNum.toLocaleString("en-IN")}.`,
+              `Your emergency runway remains at ${emergencyRunwayMonths} months, ensuring ongoing monthly bills and EMIs remain undisturbed.`,
+              `Monthly operating surplus of ₹${Math.max(0, monthlySurplus).toLocaleString("en-IN")} replenishes this outlay within ${(amountNum / Math.max(1, monthlySurplus)).toFixed(1)} months.`
+            ]
+          : [
+              `Procuring via staggered payments could alleviate immediate cash pressure without depleting your liquid reserves.`,
+            ],
+        whyAndRisks: !isAffordable
+          ? [
+              balance < amountNum
+                ? `The purchase price of ₹${amountNum.toLocaleString("en-IN")} exceeds the selected account's balance of ₹${balance.toLocaleString("en-IN")} by ₹${(amountNum - balance).toLocaleString("en-IN")}.`
+                : `This purchase consumes ${drainRatio}% of your liquid balance in this account, dropping reserves below the recommended 3-month safety runway.`,
+              `May jeopardize debt commitments (₹${monthlyEmi.toLocaleString("en-IN")}/mo) or emergency liquidity during unexpected outflows.`
+            ]
+          : [
+              `Discretionary spending reduces your rate of capital compounding toward active goals.`
+            ],
+        categoryImpactSummary: `Expanding ${category} by ₹${amountNum.toLocaleString("en-IN")} will increase total monthly living spend accordingly.`,
+        recommendedAction: isAffordable
+          ? "Safe to procure outright via direct debit from this account."
+          : isTight
+          ? "Consider delaying by 30–60 days to build surplus, or opt for a 3-month payment plan."
+          : "Postpone this purchase until your liquid buffer and monthly surplus are re-established.",
+      };
+    }
+
+    res.json({
+      ok: true,
+      data: aiResult,
+      computedMetrics: {
+        postPurchaseBalance,
+        monthlySurplus,
+        drainRatio,
+        emergencyRunwayMonths,
+      },
+    });
+  } catch (err) {
+    console.error("[affordability] Evaluation failed:", err);
+    res.status(500).json({
+      ok: false,
+      error: err instanceof Error ? err.message : "Affordability evaluation failed",
+    });
+  }
+});
+
 // Advisor AI Chatbot Endpoint (Gemini 3.5 Flash Lite + Tavily Real-time Web Search)
 app.post("/api/advisor/chat", async (req, res) => {
   try {

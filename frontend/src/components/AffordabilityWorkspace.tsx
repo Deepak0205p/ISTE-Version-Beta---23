@@ -1,804 +1,848 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useFinancial } from "@/context/FinancialContext";
 import {
-  AlertTriangle,
-  Calendar,
-  CheckCircle2,
-  ShieldAlert,
-  Sparkles,
-  Trash2,
-  TrendingUp,
-  Upload,
   Wallet,
-  Activity,
+  Building2,
+  Sparkles,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Layers,
   ArrowRight,
   ShieldCheck,
-  Percent,
-  Layers,
+  ChevronDown,
+  RefreshCw,
+  Clock,
+  PieChart,
 } from "lucide-react";
+import { ExpenseCategory } from "@/types";
 
-export interface AffordabilityTransaction {
-  id: string;
-  account_id: string;
-  date: string;
-  description: string;
-  raw_desc: string;
-  merchant: string;
-  amount_paise: number;
-  signed_amount_paise: number;
-  direction: "credit" | "debit";
-  category: string;
-  is_duplicate: boolean;
-  flags: Record<string, unknown>;
+interface AiAffordabilityEvaluation {
+  verdict: "YES" | "TIGHT" | "NO";
+  verdictHeadline: string;
+  confidenceScore: number;
+  netRunwayMonthsAfterPurchase: number;
+  accountDrainRatio: number;
+  howAndWhy: string[];
+  whyAndRisks: string[];
+  categoryImpactSummary: string;
+  recommendedAction: string;
 }
 
-export interface AffordabilityRecurringItem {
-  merchant: string;
-  typical_amount_paise: number;
-  frequency: string;
-  interval_days: number;
-  occurrences: number;
-  last_date: string;
-  next_expected_date: string;
-  monthly_equivalent_paise: number;
-}
-
-export interface AffordabilityAnomalyFlag {
-  tx_id: string;
-  date: string;
-  merchant: string;
-  amount_paise: number;
-  reason: string;
-  ensemble_score: number;
-}
-
-export interface AffordabilityForecastPoint {
-  week_start: string;
-  point_paise: number;
-  lo80_paise: number;
-  hi80_paise: number;
-}
-
-export interface AffordabilityReport {
-  target_amount_paise: number;
-  current_balance_paise: number;
-  expected_income_paise: number;
-  income_range_min_paise: number;
-  income_range_max_paise: number;
-  income_is_variable: boolean;
-  committed_payments_paise: number;
-  average_variable_spend_paise: number;
-  safety_buffer_paise: number;
-  safety_buffer_rule: string;
-  free_cash_before_purchase_paise: number;
-  net_after_purchase_paise: number;
-  verdict: "YES" | "TIGHT" | "NO" | "REFUSED";
-  refusal_reason: string | null;
-  distinct_months: number;
-  span_days: number;
-  committed_breakdown: Array<{
-    merchant: string;
-    amount_paise: number;
-    frequency: string;
-    next_expected_date: string;
-  }>;
-  variable_breakdown: Record<string, number>;
-  trace_lines: Record<string, string>;
-}
-
-export interface AffordabilitySnapshot {
-  transactions: AffordabilityTransaction[];
-  exact_duplicates_removed: number;
-  near_duplicates_flagged: number;
-  recurring: AffordabilityRecurringItem[];
-  anomalies: AffordabilityAnomalyFlag[];
-  forecast: AffordabilityForecastPoint[];
-  affordability: AffordabilityReport;
-}
-
-const CATEGORY_OPTIONS = [
-  "Groceries",
-  "Essential Groceries",
+const CATEGORY_CHOICES: ExpenseCategory[] = [
+  "Shopping",
+  "Grocery & Food",
+  "Transportation & Fuel",
+  "Entertainment",
+  "Electricity & Utilities",
   "Rent & Housing",
   "Subscriptions",
-  "Dining & Food",
-  "Transport",
-  "Utilities",
-  "Shopping & Misc",
-  "Salary",
-  "Income",
+  "Medical & Health",
+  "Education",
+  "Miscellaneous",
 ];
 
-export function formatPaiseINR(paise: number): string {
-  const inr = paise / 100;
-  const hasDecimals = Math.abs(paise % 100) !== 0;
+const PRESET_AMOUNTS = [5000, 15000, 35000, 75000, 150000];
+
+function formatRupee(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    minimumFractionDigits: hasDecimals ? 2 : 0,
-    maximumFractionDigits: hasDecimals ? 2 : 0,
-  }).format(inr);
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 export const AffordabilityWorkspace: React.FC = () => {
-  const { isDarkMode, syncWithBackend } = useFinancial();
-  const [snapshot, setSnapshot] = useState<AffordabilitySnapshot | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [questionInput, setQuestionInput] = useState<string>(
-    "Can I afford ₹80,000 next month?"
-  );
-  const [correctionNote, setCorrectionNote] = useState<string | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { isDarkMode, bankAccounts, transactions, expenses, metrics } = useFinancial();
 
-  const fetchSnapshot = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/ps4", { cache: "no-store" });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        void syncWithBackend();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("mm_ledger_updated"));
-        }
-      }
-    } catch {
-      // Ignore initial load error
-    } finally {
-      setLoading(false);
+  // Bank account selection: "all" or specific account ID
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
+
+  // Purchase input fields
+  const [productName, setProductName] = useState<string>("Apple MacBook Air M3");
+  const [purchaseAmount, setPurchaseAmount] = useState<number>(85000);
+  const [category, setCategory] = useState<ExpenseCategory>("Shopping");
+  const [paymentType, setPaymentType] = useState<string>("lump_sum"); // lump_sum, emi_3, emi_6
+
+  // AI evaluation states
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [evaluation, setEvaluation] = useState<AiAffordabilityEvaluation | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
+
+  // Derive active account context & balances
+  const activeAccount = useMemo(() => {
+    if (selectedAccountId === "all") return null;
+    return bankAccounts.find((acc) => acc.id === selectedAccountId) || null;
+  }, [bankAccounts, selectedAccountId]);
+
+  const accountName = useMemo(() => {
+    if (activeAccount) {
+      return `${activeAccount.bankName} (${activeAccount.accountType} ••••${activeAccount.maskedAccountNumber.slice(-4)})`;
     }
-  };
+    return bankAccounts.length > 0 ? "All Accounts (Consolidated Ledger)" : "Self-Reported Balance Sheet";
+  }, [activeAccount, bankAccounts]);
 
+  const liquidBalance = useMemo(() => {
+    if (activeAccount) {
+      return activeAccount.currentBalance || 0;
+    }
+    if (bankAccounts.length > 0) {
+      return bankAccounts.reduce((sum, acc) => sum + (acc.currentBalance || 0), 0);
+    }
+    return metrics.liquidCapital || 0;
+  }, [activeAccount, bankAccounts, metrics.liquidCapital]);
+
+  // Historical transactions scoped to the selected bank account
+  const accountTransactions = useMemo(() => {
+    if (activeAccount) {
+      return transactions.filter((t) => t.bankAccountId === activeAccount.id);
+    }
+    return transactions;
+  }, [activeAccount, transactions]);
+
+  // Calculate monthly inflow & outflow for selected account
+  const { monthlyInflow, monthlyOutflow } = useMemo(() => {
+    if (accountTransactions.length > 0) {
+      const credits = accountTransactions
+        .filter((t) => t.type === "CREDIT")
+        .reduce((sum, t) => sum + t.amount, 0);
+      const debits = accountTransactions
+        .filter((t) => t.type === "DEBIT")
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Estimate monthly span from unique months in transactions
+      const uniqueMonths = new Set(
+        accountTransactions.map((t) => (t.date ? t.date.slice(0, 7) : "cur"))
+      ).size;
+      const divisor = Math.max(1, uniqueMonths);
+
+      return {
+        monthlyInflow: Math.round(credits / divisor),
+        monthlyOutflow: Math.round(debits / divisor),
+      };
+    }
+
+    // Fallback to global metrics if no granular transactions
+    if (selectedAccountId === "all") {
+      return {
+        monthlyInflow: metrics.monthlyRunRateInflow || 0,
+        monthlyOutflow: metrics.monthlyRunRateExpenses || 0,
+      };
+    }
+
+    return { monthlyInflow: 0, monthlyOutflow: 0 };
+  }, [accountTransactions, selectedAccountId, metrics]);
+
+  // Historical Spend by Category for selected account
+  const categorySpendMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    CATEGORY_CHOICES.forEach((c) => (map[c] = 0));
+
+    // Aggregate from scoped transactions or expenses
+    if (accountTransactions.length > 0) {
+      accountTransactions
+        .filter((t) => t.type === "DEBIT")
+        .forEach((t) => {
+          const cat = (t.category as string) || "Miscellaneous";
+          map[cat] = (map[cat] || 0) + t.amount;
+        });
+    } else {
+      // Fallback to expenses list
+      const scopedExpenses = activeAccount
+        ? expenses.filter((e) => e.bankAccountId === activeAccount.id)
+        : expenses;
+      scopedExpenses.forEach((e) => {
+        map[e.category] = (map[e.category] || 0) + e.amount;
+      });
+    }
+
+    return map;
+  }, [accountTransactions, activeAccount, expenses]);
+
+  // Post-purchase calculations
+  const effectiveAddition = useMemo(() => {
+    if (paymentType === "emi_3") return Math.round(purchaseAmount / 3);
+    if (paymentType === "emi_6") return Math.round(purchaseAmount / 6);
+    return purchaseAmount;
+  }, [purchaseAmount, paymentType]);
+
+  const currentCategorySpend = categorySpendMap[category] || 0;
+  const projectedCategorySpend = currentCategorySpend + effectiveAddition;
+  const projectedMonthlyLivingSpend = monthlyOutflow + effectiveAddition;
+  const remainingMonthlySurplus = Math.max(0, monthlyInflow - projectedMonthlyLivingSpend);
+
+  // Invoke AI Evaluation Endpoint
+  const runAiEvaluation = useCallback(
+    async (
+      overrideProd = productName,
+      overrideAmt = purchaseAmount,
+      overrideCat = category,
+      overridePay = paymentType
+    ) => {
+      setIsEvaluating(true);
+      setEvalError(null);
+
+      try {
+        const res = await fetch("/api/affordability/ai-evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productName: overrideProd,
+            purchaseAmount: overrideAmt,
+            category: overrideCat,
+            paymentType: overridePay,
+            accountData: {
+              accountName,
+              currentBalance: liquidBalance,
+              monthlyInflow,
+              monthlyOutflow,
+            },
+            globalMetrics: {
+              consolidatedNetWorth: metrics.consolidatedNetWorth,
+              totalMonthlyEmiCommitments: metrics.totalMonthlyEmiCommitments,
+            },
+          }),
+        });
+
+        const data = await res.json();
+        if (data.ok && data.data) {
+          setEvaluation(data.data);
+        } else {
+          setEvalError(data.error || "Failed to retrieve AI evaluation.");
+        }
+      } catch (err) {
+        setEvalError(err instanceof Error ? err.message : "Network error");
+      } finally {
+        setIsEvaluating(false);
+      }
+    },
+    [productName, purchaseAmount, category, paymentType, accountName, liquidBalance, monthlyInflow, monthlyOutflow, metrics]
+  );
+
+  // Run initial evaluation on mount or account change
   useEffect(() => {
-    fetchSnapshot();
-  }, []);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setLoading(true);
-    setCorrectionNote(null);
-    setUploadStatus("Uploading document & parsing with AI and bank adapters...");
-    try {
-      const formData = new FormData();
-      formData.append("replace", "false");
-      formData.append("account_label", "Primary-Statement");
-      for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
-      }
-      const res = await fetch("/api/ps4", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        setUploadStatus(
-          `Successfully processed ${files.length} statement(s) • ${data.snapshot.transactions.length} active transactions in ledger.`
-        );
-      } else {
-        setUploadStatus(`Upload failed: ${data.error || "Could not parse document"}`);
-      }
-    } catch (err) {
-      setUploadStatus(`Upload failed: ${err instanceof Error ? err.message : "Network error"}`);
-    } finally {
-      setLoading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const handleCategoryChange = async (merchant: string, newCategory: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/ps4", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "correction",
-          merchant,
-          new_category: newCategory,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        setCorrectionNote(
-          `Updated ${data.merchant} to ${data.new_category} — ${data.note}`
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAskQuestion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const match = questionInput.match(/₹?\s*([\d,]+(?:\.\d+)?)/);
-    const parsedAmount = match
-      ? parseFloat(match[1].replace(/,/g, ""))
-      : 80000;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/ps4", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "question",
-          amount_inr: isNaN(parsedAmount) ? 80000 : parsedAmount,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleWipe = async () => {
-    setLoading(true);
-    setCorrectionNote(null);
-    setUploadStatus(null);
-    try {
-      const res = await fetch("/api/ps4", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "wipe" }),
-      });
-      const data = await res.json();
-      if (data.ok && data.snapshot) {
-        setSnapshot(data.snapshot);
-        void syncWithBackend();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("mm_ledger_updated"));
-        }
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const txns = useMemo(
-    () => snapshot?.transactions ?? [],
-    [snapshot?.transactions]
-  );
-  const aff = snapshot?.affordability ?? null;
-  const recurring = snapshot?.recurring ?? [];
-  const anomalies = snapshot?.anomalies ?? [];
-  const forecast = snapshot?.forecast ?? [];
-
-  // Monthly trend calculation
-  const monthlyTrend = useMemo(() => {
-    const buckets: Record<string, { income_paise: number; spend_paise: number }> =
-      {};
-    for (const t of txns) {
-      const m = t.date ? t.date.slice(0, 7) : "Unknown";
-      if (!buckets[m]) {
-        buckets[m] = { income_paise: 0, spend_paise: 0 };
-      }
-      if (t.direction === "credit") {
-        buckets[m].income_paise += t.amount_paise;
-      } else {
-        buckets[m].spend_paise += t.amount_paise;
-      }
-    }
-    return Object.entries(buckets)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, vals]) => ({ month, ...vals }));
-  }, [txns]);
-
-  // Category breakdown calculation
-  const spendByCategory = useMemo(() => {
-    const cats: Record<string, number> = {};
-    for (const t of txns) {
-      if (t.direction === "debit") {
-        const c = t.category || "Uncategorized";
-        cats[c] = (cats[c] || 0) + t.amount_paise;
-      }
-    }
-    return Object.entries(cats)
-      .map(([category, amount_paise]) => ({ category, amount_paise }))
-      .sort((a, b) => b.amount_paise - a.amount_paise);
-  }, [txns]);
-
-  const maxCatPaise = spendByCategory[0]?.amount_paise ?? 1;
-  const maxTrendPaise = Math.max(
-    1,
-    ...monthlyTrend.map((m) => Math.max(m.income_paise, m.spend_paise))
-  );
+    runAiEvaluation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId]);
 
   return (
-    <div className="space-y-6 pb-16 text-[#121008] dark:text-[#F8F7F4]" data-testid="affordability-dashboard">
-      {/* Top Header Bar */}
-      <header className="card-z flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 shadow-sm">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#F2ECE3] dark:bg-[#273549] text-[#8F7D65] flex items-center justify-center font-bold">
-              <Sparkles className="w-4 h-4" />
+    <div className="space-y-6 pb-12">
+      {/* =========================================================================
+          TOP EXECUTIVE BAR: BANK ACCOUNT SELECTOR (Replaces Statement Upload Bar)
+          ========================================================================= */}
+      <header className="rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-5 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Title & Subtitle */}
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#8F7D65] animate-pulse" />
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#121008] dark:text-[#F8F7F4]">
+                Purchase Affordability
+              </h1>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#121008] dark:text-[#F8F7F4]">
-              Can I Afford It?
-            </h1>
+            <p className="text-xs sm:text-sm text-[#8F7D65] dark:text-[#B3A898] mt-0.5">
+              Fiduciary AI Purchase Feasibility & Account-Scoped Category Impact
+            </p>
           </div>
-          <p className="text-xs sm:text-sm text-black dark:text-[#94A3B8] max-w-3xl">
-            Deterministic Affordability Engine with multi-account merge, de-duplication, subscription detection, anomaly detection, and cashflow simulation.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label
-            htmlFor="statement-upload"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white font-semibold text-xs sm:text-sm cursor-pointer transition shadow-md shadow-[#8F7D65]/20"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Upload Statement (CSV / PDF)</span>
-            <input
-              id="statement-upload"
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".csv,.pdf"
-              onChange={handleFileUpload}
-              className="sr-only"
-              data-testid="statement-file-input"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleWipe}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#F1F5F9] dark:bg-[#273549] hover:bg-rose-50 dark:hover:bg-rose-950/40 text-black dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-300 border border-[#E6E1D8] dark:border-[#3A3226] text-xs font-semibold transition cursor-pointer"
-            data-testid="wipe-data-button"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Reset Ledger</span>
-          </button>
+          {/* Bank Account Selector Dropdown */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] rounded-xl px-3 py-2 text-xs">
+              <Building2 className="w-4 h-4 text-[#8F7D65] shrink-0" />
+              <span className="text-[#8F7D65] font-semibold">Scoped Bank Account:</span>
+              <select
+                aria-label="Select Bank Account"
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                className="bg-transparent font-semibold text-[#121008] dark:text-[#F8F7F4] focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="all" className="bg-[#FFFFFF] dark:bg-[#1D1913] text-[#121008] dark:text-[#F8F7F4]">
+                  All Accounts (Consolidated Ledger)
+                </option>
+                {bankAccounts.map((acc) => (
+                  <option
+                    key={acc.id}
+                    value={acc.id}
+                    className="bg-[#FFFFFF] dark:bg-[#1D1913] text-[#121008] dark:text-[#F8F7F4]"
+                  >
+                    {acc.bankName} ({acc.accountType}) • ₹{acc.currentBalance.toLocaleString("en-IN")}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Current Liquid Balance Tag */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F2ECE3] dark:bg-[#273549] border border-[#8F7D65]/20 text-xs">
+              <span className="text-[#8F7D65] font-medium">Verified Balance:</span>
+              <span className="font-mono font-bold text-[#121008] dark:text-[#F8F7F4]">
+                {formatRupee(liquidBalance)}
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 
-      {uploadStatus && (
-        <div
-          className="rounded-xl bg-[#F2ECE3] dark:bg-[#1D1913] border border-[#8F7D65]/30 px-4 py-3 text-xs sm:text-sm text-[#6F5D48] dark:text-[#60A5FA] flex items-center justify-between"
-          data-testid="upload-status-banner"
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#8F7D65] shrink-0" />
-            <span className="font-medium">{uploadStatus}</span>
-          </div>
-          {txns.length > 0 && (
-            <span className="font-mono text-xs text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-              Merged: {Array.from(new Set(txns.map((t) => t.account_id))).join(", ")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Row 1: Deterministic Affordability Engine + Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 6 cols: Affordability Question & Step-by-Step Receipt */}
-        <section
-          className="card-z lg:col-span-6 rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 flex flex-col justify-between space-y-5"
-          data-testid="affordability-panel"
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-[#8F7D65]" />
-                <h2 className="text-base font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                  Affordability Calculator
-                </h2>
+      {/* =========================================================================
+          TWO-SECTION MAIN LAYOUT:
+          1. AI Purchase Affordability Calculator
+          2. Spend by Category & Projected Purchase Impact
+          ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* =====================================================================
+            MODULE 1: AI PURCHASE AFFORDABILITY CALCULATOR (7 Cols)
+            ===================================================================== */}
+        <section className="lg:col-span-7 space-y-5">
+          <div className="rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 shadow-sm space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#E6E1D8] dark:border-[#3A3226] pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#F2ECE3] dark:bg-[#273549] flex items-center justify-center text-[#8F7D65]">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#121008] dark:text-[#F8F7F4]">
+                    AI Affordability Calculator
+                  </h2>
+                  <p className="text-xs text-[#8F7D65]">
+                    Analyzed against {accountName}
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#F1F5F9] dark:bg-[#273549] text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-                Real-Time Solver
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#F2ECE3] dark:bg-[#273549] text-[#8F7D65] border border-[#8F7D65]/20">
+                <Sparkles className="w-3 h-3 text-[#8F7D65]" />
+                Gemini Fiduciary Model
               </span>
             </div>
 
-            <form onSubmit={handleAskQuestion} className="flex gap-2">
-              <input
-                type="text"
-                aria-label="Ask affordability question"
-                value={questionInput}
-                onChange={(e) => setQuestionInput(e.target.value)}
-                className="flex-1 rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
-                data-testid="affordability-question-input"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-5 py-2.5 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white font-semibold text-xs sm:text-sm transition shrink-0 cursor-pointer shadow-sm shadow-[#8F7D65]/20"
-                data-testid="affordability-ask-button"
-              >
-                Evaluate
-              </button>
-            </form>
-
-            {aff && aff.verdict === "REFUSED" ? (
-              <div
-                className="rounded-xl bg-[#F1F5F9] dark:bg-[#273549] border border-[#E6E1D8] dark:border-[#3A3226] p-4 space-y-2 text-black dark:text-[#94A3B8] dark:text-[#94A3B8]"
-                data-testid="refusal-banner"
-              >
-                <div className="flex items-center gap-2 font-semibold text-sm text-[#121008] dark:text-[#F8F7F4]">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#8F7D65]" />
-                  <span>Awaiting Sufficient Historical Statements</span>
+            {/* Inputs Form */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Item / Service Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8F7D65]">
+                    Product or Expense Description
+                  </label>
+                  <input
+                    type="text"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="e.g. Sony Bravia 65 TV, iPhone 16..."
+                    className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-xs sm:text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
+                  />
                 </div>
-                <p className="text-xs leading-relaxed" data-testid="refusal-reason">
-                  {aff.refusal_reason}
-                </p>
+
+                {/* Purchase Amount */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8F7D65]">
+                    Purchase Price (₹ INR)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8F7D65]">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      value={purchaseAmount || ""}
+                      onChange={(e) => setPurchaseAmount(Math.max(0, Number(e.target.value)))}
+                      placeholder="0"
+                      className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] pl-8 pr-3.5 py-2.5 text-xs sm:text-sm font-mono font-bold text-[#121008] dark:text-[#F8F7F4] focus:outline-none focus:border-[#8F7D65]"
+                    />
+                  </div>
+                </div>
               </div>
-            ) : aff ? (
-              <div className="space-y-4" data-testid="affordability-steps">
-                {/* Verdict Banner */}
-                <div className="flex items-center justify-between rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-4 shadow-sm">
-                  <div>
-                    <p className="text-[11px] font-mono uppercase text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-                      Affordability Verdict for {formatPaiseINR(aff.target_amount_paise)}
-                    </p>
-                    <p
-                      className={`text-xl font-bold font-mono mt-0.5 ${
-                        aff.verdict === "YES"
-                          ? "text-[#8F7D65]"
-                          : aff.verdict === "TIGHT"
-                          ? "text-[#8F7D65]"
-                          : "text-rose-500"
-                      }`}
-                      data-testid="step-verdict"
-                    >
-                      {aff.verdict === "YES"
-                        ? "🟢 COMFORTABLE"
-                        : aff.verdict === "TIGHT"
-                        ? "🟣 TIGHT CASHFLOW"
-                        : "🔴 NOT RECOMMENDED"}
-                    </p>
-                    <p className="text-xs text-black dark:text-[#94A3B8] dark:text-[#94A3B8] mt-1 font-mono">
-                      Projected Free Cash After Purchase:{" "}
-                      <span className="font-bold text-[#121008] dark:text-[#F8F7F4]">
-                        {formatPaiseINR(aff.net_after_purchase_paise)}
-                      </span>
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-md text-xs font-mono bg-[#F2ECE3] dark:bg-[#1D1913] text-[#6F5D48] dark:text-[#8F7D65] border border-[#8F7D65]/20">
-                    {aff.distinct_months} mo ({aff.span_days}d)
-                  </span>
+
+              {/* Quick Amount Presets */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] text-[#8F7D65] font-semibold mr-1">Presets:</span>
+                {PRESET_AMOUNTS.map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => {
+                      setPurchaseAmount(amt);
+                      runAiEvaluation(productName, amt, category, paymentType);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition border ${
+                      purchaseAmount === amt
+                        ? "bg-[#8F7D65] text-white border-[#8F7D65] shadow-xs"
+                        : "bg-[#F8F7F4] dark:bg-[#121008] text-[#8F7D65] border-[#E6E1D8] dark:border-[#3A3226] hover:border-[#8F7D65]"
+                    }`}
+                  >
+                    {formatRupee(amt)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Target Category & Procurement Mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8F7D65]">
+                    Target Category
+                  </label>
+                  <select
+                    aria-label="Select Target Category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                    className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-xs sm:text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
+                  >
+                    {CATEGORY_CHOICES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Step-by-step waterfall */}
-                <div className="rounded-xl bg-[#FFFFFF] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] divide-y divide-[#E6E1D8] dark:divide-[#273549] text-xs font-mono">
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-                      1. Current Closing Balance
-                    </span>
-                    <span className="font-semibold text-[#121008] dark:text-[#F8F7F4]" data-testid="step-balance">
-                      {formatPaiseINR(aff.current_balance_paise)}
-                    </span>
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8F7D65]">
+                    Procurement Mode
+                  </label>
+                  <select
+                    aria-label="Select Procurement Mode"
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value)}
+                    className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-xs sm:text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
+                  >
+                    <option value="lump_sum">Outright Payment (One-time Debit)</option>
+                    <option value="emi_3">3-Month Staggered EMI (~{formatRupee(Math.round(purchaseAmount / 3))}/mo)</option>
+                    <option value="emi_6">6-Month Staggered EMI (~{formatRupee(Math.round(purchaseAmount / 6))}/mo)</option>
+                  </select>
+                </div>
+              </div>
 
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <span className="text-[#8F7D65] font-semibold">
-                        2. + Expected Monthly Income
-                      </span>
-                      {aff.income_is_variable && (
-                        <span className="block text-[10px] text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-                          Range: {formatPaiseINR(aff.income_range_min_paise)} – {formatPaiseINR(aff.income_range_max_paise)}
-                        </span>
+              {/* Evaluate Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={isEvaluating}
+                  onClick={() => runAiEvaluation()}
+                  className="w-full py-3 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white font-semibold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-[#8F7D65]/20 cursor-pointer disabled:opacity-60"
+                >
+                  {isEvaluating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Synthesizing Bank History with AI Model...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Evaluate Purchase Feasibility with AI</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Error Banner if any */}
+            {evalError && (
+              <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 p-3.5 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{evalError}</span>
+              </div>
+            )}
+
+            {/* ===================================================================
+                AI VERDICT DISPLAY & POINT-BY-POINT BREAKDOWN
+                =================================================================== */}
+            {evaluation && (
+              <div className="space-y-4 pt-2">
+                {/* Executive Verdict Banner */}
+                <div
+                  className={`rounded-2xl p-5 border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    evaluation.verdict === "YES"
+                      ? "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-100"
+                      : evaluation.verdict === "TIGHT"
+                      ? "bg-amber-50/70 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40 text-amber-900 dark:text-amber-100"
+                      : "bg-rose-50/70 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800/40 text-rose-900 dark:text-rose-100"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {evaluation.verdict === "YES" ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      ) : evaluation.verdict === "TIGHT" ? (
+                        <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
                       )}
-                    </div>
-                    <span className="font-semibold text-[#8F7D65]" data-testid="step-income">
-                      + {formatPaiseINR(aff.expected_income_paise)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-[#8F7D65] font-semibold">
-                      3. − Committed Payments (Subscriptions/Rent)
-                    </span>
-                    <span className="font-semibold text-[#8F7D65]" data-testid="step-committed">
-                      − {formatPaiseINR(aff.committed_payments_paise)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-[#8F7D65] font-semibold">
-                      4. − Average Variable Spend
-                    </span>
-                    <span className="font-semibold text-[#8F7D65]" data-testid="step-variable">
-                      − {formatPaiseINR(aff.average_variable_spend_paise)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <span className="text-black dark:text-[#94A3B8] dark:text-[#94A3B8]">
-                        5. − Safety Buffer ({aff.safety_buffer_rule})
+                      <span className="font-mono text-xs uppercase tracking-wider font-bold">
+                        {evaluation.verdict === "YES"
+                          ? "🟢 VERDICT: AFFORDABLE"
+                          : evaluation.verdict === "TIGHT"
+                          ? "🟡 VERDICT: STRETCH / CAUTION"
+                          : "🔴 VERDICT: NOT RECOMMENDED"}
                       </span>
                     </div>
-                    <span className="font-semibold text-black dark:text-[#94A3B8] dark:text-[#94A3B8]" data-testid="step-buffer">
-                      − {formatPaiseINR(aff.safety_buffer_paise)}
+                    <p className="text-base sm:text-lg font-bold">
+                      {evaluation.verdictHeadline}
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-white/70 dark:bg-black/30 border border-current/10">
+                      Confidence: {evaluation.confidenceScore}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Key Balance & Runway Metric Strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 text-center">
+                    <span className="text-[10px] font-medium text-[#8F7D65] block uppercase">
+                      Current Balance
+                    </span>
+                    <span className="text-sm font-mono font-bold text-[#121008] dark:text-[#F8F7F4]">
+                      {formatRupee(liquidBalance)}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#F8F7F4] dark:bg-[#1D1913]">
-                    <span className="text-[#121008] dark:text-[#F8F7F4] font-semibold">
-                      = Safe Spendable Headroom
-                    </span>
-                    <span className="font-bold text-[#121008] dark:text-[#F8F7F4]" data-testid="step-headroom">
-                      {formatPaiseINR(aff.free_cash_before_purchase_paise)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#F2ECE3] dark:bg-[#273549]">
-                    <span className="text-[#6F5D48] dark:text-[#60A5FA] font-bold">
-                      6. Net Headroom After {formatPaiseINR(aff.target_amount_paise)} Purchase
+                  <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 text-center">
+                    <span className="text-[10px] font-medium text-[#8F7D65] block uppercase">
+                      Post-Purchase Balance
                     </span>
                     <span
-                      className={`font-bold ${
-                        aff.verdict === "YES"
-                          ? "text-[#8F7D65]"
-                          : aff.verdict === "TIGHT"
-                          ? "text-[#8F7D65]"
-                          : "text-rose-500"
+                      className={`text-sm font-mono font-bold ${
+                        liquidBalance - purchaseAmount >= 0
+                          ? "text-[#121008] dark:text-[#F8F7F4]"
+                          : "text-rose-600 dark:text-rose-400"
                       }`}
-                      data-testid="step-net"
                     >
-                      {formatPaiseINR(aff.net_after_purchase_paise)}
+                      {formatRupee(liquidBalance - purchaseAmount)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 text-center">
+                    <span className="text-[10px] font-medium text-[#8F7D65] block uppercase">
+                      Safety Runway
+                    </span>
+                    <span className="text-sm font-mono font-bold text-[#121008] dark:text-[#F8F7F4]">
+                      {evaluation.netRunwayMonthsAfterPurchase} mos
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 text-center">
+                    <span className="text-[10px] font-medium text-[#8F7D65] block uppercase">
+                      Capital Drain
+                    </span>
+                    <span
+                      className={`text-sm font-mono font-bold ${
+                        evaluation.accountDrainRatio > 50
+                          ? "text-rose-600 dark:text-rose-400"
+                          : "text-[#8F7D65]"
+                      }`}
+                    >
+                      {evaluation.accountDrainRatio}%
                     </span>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-6 text-center text-xs text-black dark:text-[#94A3B8]">
-                Upload your bank statement above to see instant mathematical affordability verification.
+
+                {/* Point-by-Point Breakdown: How & Why (If YES) vs Why & Risks (If NO) */}
+                <div className="space-y-3 pt-1">
+                  {/* How & Why Section */}
+                  {evaluation.howAndWhy && evaluation.howAndWhy.length > 0 && (
+                    <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-4 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Feasibility Breakdown (How & Why)</span>
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-[#29241E] dark:text-[#D1C7BA] leading-relaxed">
+                        {evaluation.howAndWhy.map((point, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Why & Risks Section */}
+                  {evaluation.whyAndRisks && evaluation.whyAndRisks.length > 0 && (
+                    <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-4 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 dark:text-rose-400 uppercase tracking-wide">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Solvency Warnings & Risk Breakdown</span>
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-[#29241E] dark:text-[#D1C7BA] leading-relaxed">
+                        {evaluation.whyAndRisks.map((risk, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5" />
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recommended Action */}
+                  {evaluation.recommendedAction && (
+                    <div className="rounded-xl bg-[#F2ECE3] dark:bg-[#273549] border border-[#8F7D65]/20 p-3.5 flex items-start gap-2.5 text-xs text-[#29241E] dark:text-[#F8F7F4]">
+                      <ArrowRight className="w-4 h-4 text-[#8F7D65] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-[#8F7D65] block uppercase text-[10px] tracking-wider">
+                          Fiduciary Recommendation:
+                        </span>
+                        <span>{evaluation.recommendedAction}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </section>
 
-        {/* Right 6 cols: Spend by Category + Monthly Trend + Weekly Forecast */}
-        <section className="lg:col-span-6 grid grid-cols-1 gap-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* Spend by Category */}
-            <div
-              className="card-z rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-5 space-y-3"
-              data-testid="spend-by-category"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                  Spend by Category
-                </h3>
-                <span className="text-[11px] font-mono text-black dark:text-[#94A3B8]">
-                  {spendByCategory.length} categories
-                </span>
-              </div>
-              {spendByCategory.length === 0 ? (
-                <p className="text-xs text-black dark:text-[#94A3B8] py-6 text-center">
-                  Upload statements to view spend breakdown by category.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {spendByCategory.map((item) => (
-                    <div key={item.category} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#121008] dark:text-[#F8F7F4] font-medium">
-                          {item.category}
-                        </span>
-                        <span className="font-mono font-semibold text-[#8F7D65]">
-                          {formatPaiseINR(item.amount_paise)}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-[#F1F5F9] dark:bg-[#273549] overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#8F7D65]"
-                          style={{
-                            width: `${Math.max(5, Math.round((item.amount_paise / maxCatPaise) * 100))}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+        {/* =====================================================================
+            MODULE 2: SPEND BY CATEGORY & IMPACT VISUALIZATION (5 Cols)
+            ===================================================================== */}
+        <section className="lg:col-span-5 space-y-5">
+          <div className="rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 shadow-sm space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#E6E1D8] dark:border-[#3A3226] pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#F2ECE3] dark:bg-[#273549] flex items-center justify-center text-[#8F7D65]">
+                  <PieChart className="w-4 h-4" />
                 </div>
-              )}
-            </div>
-
-            {/* Monthly Trend */}
-            <div
-              className="card-z rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-5 space-y-3"
-              data-testid="monthly-trend"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                  Monthly Cashflow
-                </h3>
-                <span className="text-[11px] font-mono text-black dark:text-[#94A3B8]">Income vs Spend</span>
-              </div>
-              {monthlyTrend.length === 0 ? (
-                <p className="text-xs text-black dark:text-[#94A3B8] py-6 text-center">
-                  Upload statements to view monthly cashflow trend.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {monthlyTrend.map((m) => (
-                    <div key={m.month} className="space-y-1 text-xs">
-                      <div className="flex items-center justify-between font-mono">
-                        <span className="text-[#121008] dark:text-[#F8F7F4] font-medium">
-                          {m.month}
-                        </span>
-                        <span className="text-[#8F7D65] font-semibold">
-                          +{formatPaiseINR(m.income_paise)}
-                        </span>
-                        <span className="text-[#8F7D65] font-semibold">
-                          −{formatPaiseINR(m.spend_paise)}
-                        </span>
-                      </div>
-                      <div className="flex gap-1 h-2">
-                        <div
-                          className="bg-[#8F7D65] rounded-sm"
-                          style={{
-                            width: `${Math.max(4, Math.round((m.income_paise / maxTrendPaise) * 50))}%`,
-                          }}
-                        />
-                        <div
-                          className="bg-[#8F7D65] rounded-sm"
-                          style={{
-                            width: `${Math.max(4, Math.round((m.spend_paise / maxTrendPaise) * 50))}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Weekly Balance Forecast */}
-          <div
-            className="card-z rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-5 space-y-3"
-            data-testid="weekly-forecast"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[#8F7D65]" />
-                <h3 className="text-sm font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                  4-Week Projected Balance
-                </h3>
-              </div>
-              <span className="text-[11px] font-mono text-black dark:text-[#94A3B8]">80% Confidence</span>
-            </div>
-            {!Array.isArray(forecast) || forecast.length === 0 ? (
-              <p className="text-xs text-black dark:text-[#94A3B8] py-4 text-center">
-                Upload statements to generate 4-week balance projection.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {Array.isArray(forecast) &&
-                  forecast.map((pt, idx) => (
-                    <div
-                      key={pt.week_start}
-                      className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 space-y-1"
-                    >
-                      <p className="text-[10px] font-mono text-black dark:text-[#94A3B8]">
-                        Week {idx + 1}
-                      </p>
-                      <p className="text-sm font-bold font-mono text-[#8F7D65]">
-                        {formatPaiseINR(pt.point_paise)}
-                      </p>
-                      <p className="text-[10px] font-mono text-black dark:text-[#94A3B8]">
-                        Range: {formatPaiseINR(pt.lo80_paise)} – {formatPaiseINR(pt.hi80_paise)}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* Row 2: Recurring Subscriptions Panel + Anomaly Detection Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* Recurring Subscriptions Panel */}
-        <section
-          className="card-z rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 space-y-4 flex flex-col h-[400px]"
-          data-testid="recurring-panel"
-        >
-          <div className="flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-[#8F7D65]" />
-              <h2 className="text-base font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                Recurring Payments & Subscriptions
-              </h2>
-            </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#F2ECE3] dark:bg-[#273549] text-[#6F5D48] dark:text-[#8F7D65] border border-[#8F7D65]/20">
-              {recurring.length} detected
-            </span>
-          </div>
-
-          {recurring.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-xs text-black dark:text-[#94A3B8] text-center">
-                No recurring subscriptions detected yet. Upload multi-month statements to detect recurring debits.
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto pr-1 space-y-2 divide-y divide-[#E6E1D8] dark:divide-[#273549] rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226]">
-              {recurring.map((sub) => (
-                <div
-                  key={sub.merchant}
-                  className="flex items-center justify-between px-4 py-3 text-xs"
-                  data-testid="recurring-item"
-                >
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-[#121008] dark:text-[#F8F7F4]">{sub.merchant}</p>
-                    <p className="text-[11px] text-black dark:text-[#94A3B8] font-mono">
-                      Cycle: {sub.frequency} ({sub.occurrences}x) · Next expected:{" "}
-                      <span className="text-[#8F7D65] font-semibold" data-testid="recurring-next-date">
-                        {sub.next_expected_date}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="text-right font-mono">
-                    <p className="font-bold text-[#8F7D65]" data-testid="recurring-amount">
-                      {formatPaiseINR(sub.typical_amount_paise)}
-                    </p>
-                    <p className="text-[10px] text-black dark:text-[#94A3B8]">per {sub.frequency}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Anomaly Panel */}
-        <section
-          className="card-z rounded-2xl bg-[#FFFFFF] dark:bg-[#1D1913] border border-[#E6E1D8] dark:border-[#3A3226] p-6 space-y-4 flex flex-col h-[400px]"
-          data-testid="anomaly-panel"
-        >
-          <div className="flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-[#8F7D65]" />
-              <h2 className="text-base font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                Anomalies & Duplicate Alerts
-              </h2>
-            </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-purple-50 dark:bg-purple-950/60 text-[#8F7D65] dark:text-purple-300 border border-[#8F7D65]/20">
-              {anomalies.length} flagged
-            </span>
-          </div>
-
-          {anomalies.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-xs text-black dark:text-[#94A3B8] text-center">
-                No anomalies flagged. Upload statements to run anomaly and duplicate detection.
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto pr-1 space-y-1 divide-y divide-[#E6E1D8] dark:divide-[#273549] rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226]">
-              {anomalies.map((flag) => (
-                <div
-                  key={flag.tx_id}
-                  className="px-4 py-3 space-y-1 text-xs"
-                  data-testid="anomaly-item"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-[#121008] dark:text-[#F8F7F4]">
-                      {flag.merchant} ({flag.date})
-                    </span>
-                    <span className="font-mono font-bold text-[#8F7D65]">
-                      {formatPaiseINR(flag.amount_paise)}
-                    </span>
-                  </div>
-                  <p className="text-black dark:text-[#94A3B8] dark:text-[#94A3B8] font-mono text-[11px]" data-testid="anomaly-reason">
-                    Reason: {flag.reason}
+                <div>
+                  <h3 className="text-base font-bold text-[#121008] dark:text-[#F8F7F4]">
+                    Spend by Category
+                  </h3>
+                  <p className="text-xs text-[#8F7D65]">
+                    Simulated impact on monthly living allocations
                   </p>
                 </div>
-              ))}
+              </div>
+              <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-[#F2ECE3] dark:bg-[#273549] text-[#8F7D65] border border-[#8F7D65]/20">
+                1-Mo Projection
+              </span>
             </div>
-          )}
+
+            {/* Impact Status Summary (Reflecting YES vs NO) */}
+            <div
+              className={`rounded-xl p-4 border space-y-2 ${
+                evaluation?.verdict === "YES"
+                  ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-100"
+                  : evaluation?.verdict === "TIGHT"
+                  ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40 text-amber-900 dark:text-amber-100"
+                  : "bg-rose-50/60 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800/40 text-rose-900 dark:text-rose-100"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  {evaluation?.verdict === "YES"
+                    ? "🟢 Sustainable Living Allocation"
+                    : evaluation?.verdict === "TIGHT"
+                    ? "🟡 Moderate Cashflow Pinch"
+                    : "🔴 High Solvency & Budget Deficit"}
+                </span>
+                <span className="font-mono text-xs font-bold">
+                  +{formatRupee(effectiveAddition)}
+                </span>
+              </div>
+
+              <p className="text-xs leading-relaxed">
+                {evaluation?.verdict === "YES"
+                  ? `This purchase is comfortably absorbed within your monthly operating surplus. Total monthly living outflow shifts to ${formatRupee(
+                      projectedMonthlyLivingSpend
+                    )}, leaving a protective cushion of ${formatRupee(remainingMonthlySurplus)}.`
+                  : evaluation?.verdict === "TIGHT"
+                  ? `Monthly living spend rises to ${formatRupee(
+                      projectedMonthlyLivingSpend
+                    )}, consuming substantial operating surplus and tightening emergency buffer.`
+                  : `Monthly living spend spikes to ${formatRupee(
+                      projectedMonthlyLivingSpend
+                    )}, triggering an operating shortfall or drawing heavily upon unbuffered liquid capital.`}
+              </p>
+            </div>
+
+            {/* Total Living Outflow Before vs After */}
+            <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#8F7D65]">
+                <span>Overall Monthly Living Spend</span>
+                <span>Before → Projected After</span>
+              </div>
+
+              <div className="flex items-baseline justify-between font-mono">
+                <div>
+                  <span className="text-lg font-bold text-[#121008] dark:text-[#F8F7F4]">
+                    {formatRupee(monthlyOutflow)}
+                  </span>
+                  <span className="text-[11px] text-[#8F7D65] ml-1">current</span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[#8F7D65]" />
+                <div className="text-right">
+                  <span
+                    className={`text-lg font-bold ${
+                      evaluation?.verdict === "NO"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-[#8F7D65]"
+                    }`}
+                  >
+                    {formatRupee(projectedMonthlyLivingSpend)}
+                  </span>
+                  <span className="text-[11px] text-[#8F7D65] ml-1">projected</span>
+                </div>
+              </div>
+
+              {/* Dual-color living spend progress bar */}
+              <div className="space-y-1">
+                <div className="h-2 w-full rounded-full bg-[#E6E1D8] dark:bg-[#273549] overflow-hidden flex">
+                  <div
+                    className="h-full bg-[#8F7D65]"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round((monthlyOutflow / Math.max(1, projectedMonthlyLivingSpend)) * 100)
+                      )}%`,
+                    }}
+                    title={`Current Outflow: ${formatRupee(monthlyOutflow)}`}
+                  />
+                  <div
+                    className={`h-full ${
+                      evaluation?.verdict === "NO" ? "bg-rose-500" : "bg-emerald-500"
+                    }`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          (effectiveAddition / Math.max(1, projectedMonthlyLivingSpend)) * 100
+                        )
+                      )}%`,
+                    }}
+                    title={`Purchase Outlay: ${formatRupee(effectiveAddition)}`}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-[#8F7D65]">
+                  <span>■ Base Living Outflow</span>
+                  <span
+                    className={
+                      evaluation?.verdict === "NO"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }
+                  >
+                    ■ +{formatRupee(effectiveAddition)} Purchase Impact
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Target Category High-Contrast Focus Card */}
+            <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#8F7D65]/40 p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#8F7D65]" />
+                  <span className="font-bold text-[#121008] dark:text-[#F8F7F4]">
+                    Target Category: {category}
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-xs text-[#8F7D65]">
+                  {formatRupee(currentCategorySpend)} → {formatRupee(projectedCategorySpend)}
+                </span>
+              </div>
+
+              <div className="h-2 w-full rounded-full bg-[#E6E1D8] dark:bg-[#273549] overflow-hidden flex">
+                <div
+                  className="h-full bg-[#8F7D65]"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round(
+                        (currentCategorySpend / Math.max(1, projectedCategorySpend)) * 100
+                      )
+                    )}%`,
+                  }}
+                />
+                <div
+                  className={`h-full ${
+                    evaluation?.verdict === "NO" ? "bg-rose-500" : "bg-emerald-500"
+                  }`}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round(
+                        (effectiveAddition / Math.max(1, projectedCategorySpend)) * 100
+                      )
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <p className="text-[11px] text-[#8F7D65] italic">
+                {evaluation?.categoryImpactSummary ||
+                  `Adding ${formatRupee(effectiveAddition)} expands ${category} spend by ${
+                    currentCategorySpend > 0
+                      ? Math.round((effectiveAddition / currentCategorySpend) * 100) + "%"
+                      : "100%"
+                  }.`}
+              </p>
+            </div>
+
+            {/* Itemized Categories Comparison List */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#8F7D65]">
+                <span>All Account Categories</span>
+                <span>Monthly Allocation</span>
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {CATEGORY_CHOICES.map((catName) => {
+                  const isTarget = catName === category;
+                  const baseAmt = categorySpendMap[catName] || 0;
+                  const finalAmt = isTarget ? baseAmt + effectiveAddition : baseAmt;
+                  const maxAmt = Math.max(
+                    1,
+                    ...Object.values(categorySpendMap),
+                    projectedCategorySpend
+                  );
+
+                  return (
+                    <div
+                      key={catName}
+                      className={`p-2.5 rounded-xl border transition ${
+                        isTarget
+                          ? "bg-[#F2ECE3] dark:bg-[#273549] border-[#8F7D65]"
+                          : "bg-[#F8F7F4] dark:bg-[#121008] border-[#E6E1D8] dark:border-[#3A3226]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs font-medium">
+                        <span
+                          className={
+                            isTarget
+                              ? "font-bold text-[#121008] dark:text-[#F8F7F4]"
+                              : "text-[#8F7D65]"
+                          }
+                        >
+                          {catName} {isTarget && "(+ Purchase)"}
+                        </span>
+                        <span className="font-mono font-semibold text-[#121008] dark:text-[#F8F7F4]">
+                          {formatRupee(finalAmt)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-full rounded-full bg-[#E6E1D8] dark:bg-[#3A3226] overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            isTarget
+                              ? evaluation?.verdict === "NO"
+                                ? "bg-rose-500"
+                                : "bg-[#8F7D65]"
+                              : "bg-[#8F7D65]/60"
+                          }`}
+                          style={{
+                            width: `${Math.max(4, Math.round((finalAmt / maxAmt) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </section>
       </div>
     </div>
