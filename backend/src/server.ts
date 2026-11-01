@@ -624,37 +624,58 @@ app.post("/api/affordability/ai-evaluate", async (req, res) => {
     const monthlyEmi = Number(globalMetrics.totalMonthlyEmiCommitments) || 0;
     const netWorth = Number(globalMetrics.consolidatedNetWorth) || 0;
 
-    // Calculate baseline figures
-    const postPurchaseBalance = balance - amountNum;
-    const monthlySurplus = monthlyInflow - monthlyOutflow;
-    const emergencyRunwayMonths = monthlyOutflow > 0 ? (postPurchaseBalance / monthlyOutflow).toFixed(1) : "3.0";
-    const drainRatio = balance > 0 ? Math.round((amountNum / balance) * 100) : 100;
+    // Calculate baseline figures accounting for EMI vs Outright
+    const isEmi3 = paymentType === "emi_3" || (typeof paymentType === "string" && paymentType.toLowerCase().includes("3-month"));
+    const isEmi6 = paymentType === "emi_6" || (typeof paymentType === "string" && paymentType.toLowerCase().includes("6-month"));
+
+    let immediateCashImpact = amountNum;
+    let monthlyEmiAddition = 0;
+    let procurementModeLabel = "Outright One-time Payment";
+
+    if (isEmi3) {
+      monthlyEmiAddition = Math.round(amountNum / 3);
+      immediateCashImpact = monthlyEmiAddition;
+      procurementModeLabel = `3-Month Staggered EMI (₹${monthlyEmiAddition.toLocaleString("en-IN")}/mo)`;
+    } else if (isEmi6) {
+      monthlyEmiAddition = Math.round(amountNum / 6);
+      immediateCashImpact = monthlyEmiAddition;
+      procurementModeLabel = `6-Month Staggered EMI (₹${monthlyEmiAddition.toLocaleString("en-IN")}/mo)`;
+    }
+
+    const postPurchaseBalance = balance - immediateCashImpact;
+    const effectiveMonthlyOutflow = monthlyOutflow + monthlyEmiAddition;
+    const monthlySurplus = monthlyInflow - effectiveMonthlyOutflow;
+    const emergencyRunwayMonths = effectiveMonthlyOutflow > 0 ? (postPurchaseBalance / effectiveMonthlyOutflow).toFixed(1) : "3.0";
+    const drainRatio = balance > 0 ? Math.round((immediateCashImpact / balance) * 100) : 100;
 
     const prompt = `You are a certified Financial Risk Analyst & Fiduciary Affordability Auditor.
 Analyze the following purchase request against the user's selected bank account history and overall balance sheet:
 
 PURCHASE DETAILS:
 - Product/Service: ${productName}
-- Purchase Price: ₹${amountNum.toLocaleString("en-IN")}
+- Total Purchase Price: ₹${amountNum.toLocaleString("en-IN")}
 - Target Category: ${category}
-- Procurement Mode: ${paymentType === "lump_sum" ? "Outright One-time Payment" : paymentType}
+- Procurement Mode: ${procurementModeLabel}
+- Immediate Cash Outlay This Month: ₹${immediateCashImpact.toLocaleString("en-IN")}
+- Additional Monthly Obligation: ₹${monthlyEmiAddition.toLocaleString("en-IN")}/mo
 
 SELECTED BANK ACCOUNT (${accountName}):
 - Current Verified Liquid Balance: ₹${balance.toLocaleString("en-IN")}
 - Typical Monthly Inflow Credits: ₹${monthlyInflow.toLocaleString("en-IN")}
-- Typical Monthly Outflow Debits: ₹${monthlyOutflow.toLocaleString("en-IN")}
-- Monthly Operating Surplus: ₹${monthlySurplus.toLocaleString("en-IN")}
+- Baseline Monthly Outflow Debits: ₹${monthlyOutflow.toLocaleString("en-IN")}
+- Adjusted Monthly Outflow (Living + EMI): ₹${effectiveMonthlyOutflow.toLocaleString("en-IN")}
+- Monthly Operating Surplus (After Living + EMI): ₹${monthlySurplus.toLocaleString("en-IN")}
 - Post-Purchase Account Balance: ₹${postPurchaseBalance.toLocaleString("en-IN")}
-- Account Drain Ratio: ${drainRatio}% of liquid capital in this account
+- Immediate Account Drain Ratio: ${drainRatio}% of liquid capital in this account
 - Post-Purchase Emergency Runway: ${emergencyRunwayMonths} months
 
 OVERALL FINANCIAL CONTEXT:
 - Consolidated Net Worth: ₹${netWorth.toLocaleString("en-IN")}
-- Total Monthly EMI Debt Servicing: ₹${monthlyEmi.toLocaleString("en-IN")}
+- Existing Monthly EMI Debt Servicing: ₹${monthlyEmi.toLocaleString("en-IN")}
 
 FIDUCIARY RULES OF VERDICT:
-1. "YES" (Affordable): If the selected account retains at least 3 months of emergency expenses OR the monthly surplus exceeds the purchase cost, without creating a cash deficit or risking scheduled EMIs.
-2. "TIGHT" (Stretch / Proceed with Caution): If the purchase consumes >40% of the account's balance or drops emergency runway between 1 to 2.5 months, or leaves thin margin for unplanned expenses.
+1. "YES" (Affordable): If the selected account retains at least 2.0–3.0 months of emergency expenses AND the post-purchase monthly surplus is positive, without creating a cash deficit or risking scheduled EMIs. For staggered EMI, it is affordable if monthly surplus comfortably covers the installment and runway remains >= 2.0 months.
+2. "TIGHT" (Stretch / Proceed with Caution): If the purchase consumes >35% of the account balance OR drops emergency runway between 1 to 2.5 months, or leaves thin margin for unplanned expenses.
 3. "NO" (Unsafe / Not Recommended): If the purchase exceeds liquid balance, drops runway below 1 month, creates an operating cash deficit, or compromises debt servicing.
 
 STRICT INSTRUCTIONS:
@@ -716,8 +737,8 @@ JSON RESPONSE SCHEMA:
 
     // High-quality deterministic fallback if AI key not configured or fails
     if (!aiResult) {
-      const isAffordable = balance >= amountNum && (postPurchaseBalance >= monthlyOutflow * 2 || monthlySurplus >= amountNum);
-      const isTight = !isAffordable && balance >= amountNum;
+      const isAffordable = balance >= immediateCashImpact && (postPurchaseBalance >= effectiveMonthlyOutflow * 2.0 || monthlySurplus >= 0);
+      const isTight = !isAffordable && balance >= immediateCashImpact && postPurchaseBalance >= effectiveMonthlyOutflow;
 
       aiResult = {
         verdict: isAffordable ? "YES" : isTight ? "TIGHT" : "NO",
@@ -727,22 +748,22 @@ JSON RESPONSE SCHEMA:
           ? "Cashflow Stretch — Significant Cushion Reduction"
           : "Not Recommended — High Solvency Deficit Risk",
         confidenceScore: 92,
-        netRunwayMonthsAfterPurchase: monthlyOutflow > 0 ? Number((postPurchaseBalance / monthlyOutflow).toFixed(1)) : 3,
+        netRunwayMonthsAfterPurchase: effectiveMonthlyOutflow > 0 ? Number((postPurchaseBalance / effectiveMonthlyOutflow).toFixed(1)) : 3,
         accountDrainRatio: drainRatio,
         howAndWhy: isAffordable
           ? [
-              `Your selected account (${accountName}) holds ₹${balance.toLocaleString("en-IN")}, leaving ₹${Math.max(0, postPurchaseBalance).toLocaleString("en-IN")} after paying ₹${amountNum.toLocaleString("en-IN")}.`,
+              `Your selected account (${accountName}) holds ₹${balance.toLocaleString("en-IN")}, leaving ₹${Math.max(0, postPurchaseBalance).toLocaleString("en-IN")} after paying ₹${immediateCashImpact.toLocaleString("en-IN")}.`,
               `Your emergency runway remains at ${emergencyRunwayMonths} months, ensuring ongoing monthly bills and EMIs remain undisturbed.`,
-              `Monthly operating surplus of ₹${Math.max(0, monthlySurplus).toLocaleString("en-IN")} replenishes this outlay within ${(amountNum / Math.max(1, monthlySurplus)).toFixed(1)} months.`
+              `Monthly operating surplus of ₹${Math.max(0, monthlySurplus).toLocaleString("en-IN")} replenishes this outlay smoothly.`
             ]
           : [
               `Procuring via staggered payments could alleviate immediate cash pressure without depleting your liquid reserves.`,
             ],
         whyAndRisks: !isAffordable
           ? [
-              balance < amountNum
-                ? `The purchase price of ₹${amountNum.toLocaleString("en-IN")} exceeds the selected account's balance of ₹${balance.toLocaleString("en-IN")} by ₹${(amountNum - balance).toLocaleString("en-IN")}.`
-                : `This purchase consumes ${drainRatio}% of your liquid balance in this account, dropping reserves below the recommended 3-month safety runway.`,
+              balance < immediateCashImpact
+                ? `The immediate cash outlay of ₹${immediateCashImpact.toLocaleString("en-IN")} exceeds the selected account's balance of ₹${balance.toLocaleString("en-IN")}.`
+                : `This purchase consumes ${drainRatio}% of your liquid balance in this account, dropping reserves below recommended buffers.`,
               `May jeopardize debt commitments (₹${monthlyEmi.toLocaleString("en-IN")}/mo) or emergency liquidity during unexpected outflows.`
             ]
           : [
@@ -752,7 +773,7 @@ JSON RESPONSE SCHEMA:
         recommendedAction: isAffordable
           ? "Safe to procure outright via direct debit from this account."
           : isTight
-          ? "Consider delaying by 30–60 days to build surplus, or opt for a 3-month payment plan."
+          ? "Consider delaying by 30–60 days to build surplus, or opt for a longer payment plan."
           : "Postpone this purchase until your liquid buffer and monthly surplus are re-established.",
       };
     }

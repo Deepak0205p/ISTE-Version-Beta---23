@@ -319,7 +319,13 @@ export const AffordabilityWorkspace: React.FC = () => {
             </div>
 
             {/* Inputs Form */}
-            <div className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                runAiEvaluation();
+              }}
+              className="space-y-4"
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Item / Service Name */}
                 <div className="space-y-1.5">
@@ -366,7 +372,7 @@ export const AffordabilityWorkspace: React.FC = () => {
                       setPurchaseAmount(amt);
                       runAiEvaluation(productName, amt, category, paymentType);
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition border ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition border cursor-pointer ${
                       purchaseAmount === amt
                         ? "bg-[#8F7D65] text-white border-[#8F7D65] shadow-xs"
                         : "bg-[#F8F7F4] dark:bg-[#121008] text-[#8F7D65] border-[#E6E1D8] dark:border-[#3A3226] hover:border-[#8F7D65]"
@@ -386,7 +392,11 @@ export const AffordabilityWorkspace: React.FC = () => {
                   <select
                     aria-label="Select Target Category"
                     value={category}
-                    onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                    onChange={(e) => {
+                      const newCat = e.target.value as ExpenseCategory;
+                      setCategory(newCat);
+                      runAiEvaluation(productName, purchaseAmount, newCat, paymentType);
+                    }}
                     className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-xs sm:text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
                   >
                     {CATEGORY_CHOICES.map((c) => (
@@ -404,7 +414,11 @@ export const AffordabilityWorkspace: React.FC = () => {
                   <select
                     aria-label="Select Procurement Mode"
                     value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)}
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setPaymentType(newMode);
+                      runAiEvaluation(productName, purchaseAmount, category, newMode);
+                    }}
                     className="w-full rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] px-3.5 py-2.5 text-xs sm:text-sm text-[#121008] dark:text-[#F8F7F4] font-medium focus:outline-none focus:border-[#8F7D65]"
                   >
                     <option value="lump_sum">Outright Payment (One-time Debit)</option>
@@ -417,9 +431,8 @@ export const AffordabilityWorkspace: React.FC = () => {
               {/* Evaluate Button */}
               <div className="pt-2">
                 <button
-                  type="button"
+                  type="submit"
                   disabled={isEvaluating}
-                  onClick={() => runAiEvaluation()}
                   className="w-full py-3 rounded-xl bg-[#8F7D65] hover:bg-[#6F5D48] text-white font-semibold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-[#8F7D65]/20 cursor-pointer disabled:opacity-60"
                 >
                   {isEvaluating ? (
@@ -435,7 +448,7 @@ export const AffordabilityWorkspace: React.FC = () => {
                   )}
                 </button>
               </div>
-            </div>
+            </form>
 
             {/* Error Banner if any */}
             {evalError && (
@@ -502,16 +515,16 @@ export const AffordabilityWorkspace: React.FC = () => {
 
                   <div className="rounded-xl bg-[#F8F7F4] dark:bg-[#121008] border border-[#E6E1D8] dark:border-[#3A3226] p-3 text-center">
                     <span className="text-[10px] font-medium text-[#8F7D65] block uppercase">
-                      Post-Purchase Balance
+                      Post-Debit Balance
                     </span>
                     <span
                       className={`text-sm font-mono font-bold ${
-                        liquidBalance - purchaseAmount >= 0
+                        liquidBalance - effectiveAddition >= 0
                           ? "text-[#121008] dark:text-[#F8F7F4]"
                           : "text-rose-600 dark:text-rose-400"
                       }`}
                     >
-                      {formatRupee(liquidBalance - purchaseAmount)}
+                      {formatRupee(liquidBalance - effectiveAddition)}
                     </span>
                   </div>
 
@@ -530,7 +543,7 @@ export const AffordabilityWorkspace: React.FC = () => {
                     </span>
                     <span
                       className={`text-sm font-mono font-bold ${
-                        evaluation.accountDrainRatio > 50
+                        evaluation.accountDrainRatio > 40
                           ? "text-rose-600 dark:text-rose-400"
                           : "text-[#8F7D65]"
                       }`}
