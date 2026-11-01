@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
         destination: `${INGESTION_URL}/sync-statements/:path*`,
       },
       {
+        source: "/tax/:path*",
+        destination: `${INGESTION_URL}/tax/:path*`,
+      },
+      {
         source: "/health",
         destination: `${BACKEND_URL}/health`,
       },

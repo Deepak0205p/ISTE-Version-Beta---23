@@ -46,6 +46,9 @@ next-env.d.ts
 
 # local SQLite database & uploads
 /data/
+backend/data/
+__pycache__/
+*.pyc
 *.db
 *.db-shm
 *.db-wal

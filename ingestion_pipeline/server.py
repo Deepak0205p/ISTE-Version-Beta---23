@@ -57,6 +57,11 @@ app.add_middleware(
 # In-memory user profile registry for demonstration/retrieval
 USER_PROFILES: Dict[str, UserProfile] = {}
 
+# Mount Indian Direct Tax Engine
+from tax_engine.server import router as tax_router
+app.include_router(tax_router)
+
+
 class SyncResponse(BaseModel):
     success: bool
     userId: str

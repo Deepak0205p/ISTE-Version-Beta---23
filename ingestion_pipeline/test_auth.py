@@ -62,7 +62,7 @@ class TestOAuthManager(unittest.TestCase):
 
         service = get_user_gmail_service("user_valid_1")
         mock_creds_instance.refresh.assert_called_once()
-        mock_build.assert_called_with("gmail", "v1", credentials=mock_creds_instance)
+        mock_build.assert_called_with("gmail", "v1", credentials=mock_creds_instance, cache_discovery=False)
         self.assertIsNotNone(service)
 
 if __name__ == "__main__":
