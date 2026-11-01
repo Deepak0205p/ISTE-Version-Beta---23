@@ -124,13 +124,13 @@ class TokenRevokedOrInvalidError(Exception):
     pass
 
 
-def get_oauth_client_config() -> Dict[str, Any]:
+def get_oauth_client_config(redirect_uri: Optional[str] = None) -> Dict[str, Any]:
     """
     Retrieves Google OAuth 2.0 client configuration from environment variables.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+    effective_redirect = redirect_uri or os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
 
     if not client_id or not client_secret:
         raise OAuthConfigurationError(
@@ -144,35 +144,35 @@ def get_oauth_client_config() -> Dict[str, Any]:
             "client_secret": client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri],
+            "redirect_uris": [effective_redirect, "http://localhost:8000/auth/google/callback", "http://localhost:3000/auth/google/callback"],
         }
     }
 
 
-def create_oauth_flow(state: Optional[str] = None) -> Flow:
+def create_oauth_flow(state: Optional[str] = None, redirect_uri: Optional[str] = None) -> Flow:
     """
     Builds the Google OAuth 2.0 Flow instance.
     """
-    client_config = get_oauth_client_config()
-    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+    client_config = get_oauth_client_config(redirect_uri=redirect_uri)
+    effective_redirect = redirect_uri or os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
     
     flow = Flow.from_client_config(
         client_config=client_config,
         scopes=GMAIL_SCOPES,
         state=state
     )
-    flow.redirect_uri = redirect_uri
+    flow.redirect_uri = redirect_uri or os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
     return flow
 
 
-def generate_authorization_url(user_id: str) -> str:
+def generate_authorization_url(user_id: str, redirect_uri: Optional[str] = None) -> str:
     """
     Generates a Google OAuth 2.0 consent URL for a specific user.
     """
     if not user_id or not user_id.strip():
         raise ValueError("A valid user_id is required to generate the authorization URL.")
 
-    flow = create_oauth_flow(state=user_id)
+    flow = create_oauth_flow(state=user_id, redirect_uri=redirect_uri)
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent",
@@ -192,7 +192,7 @@ def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
         raise ValueError("Missing state (userId) in callback payload.")
 
     user_id = state
-    flow = create_oauth_flow(state=user_id)
+    flow = create_oauth_flow(state=user_id, redirect_uri=redirect_uri)
 
     # Allow insecure transport in development localhost environments
     if os.environ.get("NODE_ENV") != "production":

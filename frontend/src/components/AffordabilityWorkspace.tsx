@@ -93,8 +93,8 @@ export const AffordabilityWorkspace: React.FC = () => {
     if (bankAccounts.length > 0) {
       return bankAccounts.reduce((sum, acc) => sum + (acc.currentBalance || 0), 0);
     }
-    return metrics.liquidCapital || 0;
-  }, [activeAccount, bankAccounts, metrics.liquidCapital]);
+    return metrics.totalSavingsBalance || 0;
+  }, [activeAccount, bankAccounts, metrics.totalSavingsBalance]);
 
   // Historical transactions scoped to the selected bank account
   const accountTransactions = useMemo(() => {
@@ -129,8 +129,8 @@ export const AffordabilityWorkspace: React.FC = () => {
     // Fallback to global metrics if no granular transactions
     if (selectedAccountId === "all") {
       return {
-        monthlyInflow: metrics.monthlyRunRateInflow || 0,
-        monthlyOutflow: metrics.monthlyRunRateExpenses || 0,
+        monthlyInflow: metrics.monthlyIncome || 0,
+        monthlyOutflow: metrics.monthlyExpenses || 0,
       };
     }
 
@@ -202,8 +202,8 @@ export const AffordabilityWorkspace: React.FC = () => {
               monthlyOutflow,
             },
             globalMetrics: {
-              consolidatedNetWorth: metrics.consolidatedNetWorth,
-              totalMonthlyEmiCommitments: metrics.totalMonthlyEmiCommitments,
+              consolidatedNetWorth: metrics.netWorth,
+              totalMonthlyEmiCommitments: metrics.monthlyEmiCommitments,
             },
           }),
         });
